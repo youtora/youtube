@@ -4,340 +4,42 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>YouTube Catalog</title>
-  <style>
-    body{font-family:system-ui,Arial;max-width:1100px;margin:24px auto;padding:0 12px}
-    a{color:#0b57d0;text-decoration:none}
-    .grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
-    @media (max-width: 900px){.grid{grid-template-columns:1fr}}
-    .card{border:1px solid #ddd;border-radius:14px;padding:12px}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    input,select,button{padding:10px;font-size:16px}
-    input,select{flex:1;min-width:220px}
-    button{cursor:pointer}
-    .muted{color:#555}
-    .list{display:flex;flex-direction:column;gap:8px;max-height:70vh;overflow:auto}
-    .ch{display:flex;gap:10px;align-items:center;border:1px solid #eee;border-radius:12px;padding:10px}
-    .ch:hover{background:#fafafa}
-    .avatar{width:44px;height:44px;border-radius:10px;background:#eee;object-fit:cover;flex:0 0 auto}
-    .title{font-weight:600}
-    .hr{height:1px;background:#eee;margin:10px 0}
-
-    /* thumbnails */
-    .thumb16x9{
-      width:160px;
-      aspect-ratio:16/9;
-      border-radius:12px;
-      background:#eee;
-      object-fit:cover;
-      flex:0 0 auto;
-      border:1px solid #f0f0f0;
-    }
-    @media (max-width: 500px){
-      .thumb16x9{width:120px}
-    }
-
-    .videos{display:flex;flex-direction:column;gap:10px}
-    .video{border:1px solid #eee;border-radius:12px;padding:10px;display:flex;gap:10px;align-items:flex-start}
-    .video .meta{margin-top:6px}
-    .video .vtext{flex:1;min-width:0}
-    .pill{display:inline-block;padding:2px 8px;border:1px solid #ddd;border-radius:999px;font-size:12px;color:#444}
-    .pill + .pill{margin-inline-start:6px}
-
-    /* playlists grid */
-    .plgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-    @media (max-width: 900px){.plgrid{grid-template-columns:repeat(2,1fr)}}
-    @media (max-width: 520px){.plgrid{grid-template-columns:1fr}}
-    .pl{border:1px solid #eee;border-radius:12px;padding:10px;display:flex;gap:10px;align-items:flex-start}
-    .pl .ptext{flex:1;min-width:0}
-    .sectionTitle{margin:14px 0 8px;font-size:14px;color:#444;font-weight:700}
-  </style>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <h1>YouTube Catalog</h1>
-  <div class="muted" id="status">טוען…</div>
+  <header class="topbar">
+    <a class="brand" href="/" data-link>
+      <span class="logoDot"></span>
+      <span>YouTube Catalog</span>
+    </a>
 
-  <div class="grid">
-    <div class="card">
-      <div class="row">
-        <button onclick="refresh()">רענן</button>
-        <a href="/admin.html">ניהול</a>
-        <a href="/api/health" target="_blank">health</a>
+    <form class="search" id="searchForm">
+      <input id="searchInput" placeholder="חיפוש בכותרות…" autocomplete="off" />
+      <button type="submit">חפש</button>
+    </form>
+
+    <nav class="toplinks">
+      <a href="/admin.html">ניהול</a>
+      <a href="/api/health" target="_blank" rel="noreferrer">health</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sideHead">
+        <div class="sideTitle">ערוצים</div>
+        <button class="miniBtn" id="refreshBtn" title="רענן">↻</button>
       </div>
-
-      <div class="hr"></div>
-
-      <div class="muted">ערוצים</div>
-      <div class="list" id="channels"></div>
-    </div>
-
-    <div class="card">
-      <h2 style="margin-top:0" id="rightTitle">חיפוש</h2>
-
-      <div class="row">
-        <input id="q" placeholder="חיפוש בכותרות…" onkeydown="if(event.key==='Enter') doSearch()" />
-        <select id="filter" title="סינון לפי ערוץ"></select>
-        <button onclick="doSearch()">חפש</button>
+      <div class="sideList" id="channelsList">
+        <div class="muted pad">טוען…</div>
       </div>
+    </aside>
 
-      <div class="muted" id="hint" style="margin-top:8px"></div>
-
-      <div class="hr"></div>
-
-      <div id="content"></div>
-    </div>
+    <main class="main">
+      <div id="page"></div>
+    </main>
   </div>
 
-<script>
-  const $ = (id)=>document.getElementById(id);
-  const state = { channels: [], selectedChannelId: null };
-
-  function fmtDate(unix){
-    if(!unix) return "";
-    try {
-      return new Date(unix*1000).toLocaleDateString('he-IL', { year:'numeric', month:'2-digit', day:'2-digit' });
-    } catch { return ""; }
-  }
-  function esc(s){return (s||"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]))}
-
-  // thumbnails (נגזרות ממזהים, לא נשמר DB)
-  function ytVideoThumb(videoId, quality="mqdefault"){
-    return videoId ? `https://i.ytimg.com/vi/${videoId}/${quality}.jpg` : "";
-  }
-
-  async function api(url){
-    const r = await fetch(url);
-    const t = await r.text();
-    if(!r.ok) throw new Error(`${r.status} ${t.slice(0,120)}`);
-    return JSON.parse(t);
-  }
-
-  async function refresh(){
-    $('status').textContent = 'טוען ערוצים…';
-    const data = await api('/api/channels');
-    state.channels = data.channels || [];
-    renderChannels();
-    renderFilter();
-    $('status').textContent = `נטענו ${state.channels.length} ערוצים`;
-    $('hint').textContent = 'בחר ערוץ כדי לראות פלייליסטים וסרטונים אחרונים, או חפש בכותרות.';
-  }
-
-  function renderChannels(){
-    const box = $('channels');
-    box.innerHTML = '';
-    if(state.channels.length===0){
-      box.innerHTML = '<div class="muted">אין ערוצים עדיין.</div>';
-      return;
-    }
-    for(const ch of state.channels){
-      const div = document.createElement('div');
-      div.className = 'ch';
-      div.onclick = ()=>openChannel(ch.channel_id);
-      div.innerHTML = `
-        <img class="avatar" loading="lazy" decoding="async"
-             src="${esc(ch.thumbnail_url||'')}"
-             onerror="this.style.display='none'" />
-        <div style="min-width:0">
-          <div class="title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ch.title || ch.channel_id)}</div>
-          <div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ch.channel_id)}</div>
-        </div>
-      `;
-      box.appendChild(div);
-    }
-  }
-
-  function renderFilter(){
-    const sel = $('filter');
-    sel.innerHTML = '';
-    const opt0 = document.createElement('option');
-    opt0.value = '';
-    opt0.textContent = 'כל הערוצים';
-    sel.appendChild(opt0);
-
-    for(const ch of state.channels){
-      const opt = document.createElement('option');
-      opt.value = ch.channel_id;
-      opt.textContent = ch.title || ch.channel_id;
-      sel.appendChild(opt);
-    }
-  }
-
-  function renderPlaylists(playlists){
-    if(!playlists || playlists.length===0){
-      return `<div class="muted">אין פלייליסטים (או עדיין לא נטענו).</div>`;
-    }
-
-    // מציגים עד 60 כדי לא להעמיס
-    const list = playlists.slice(0, 60);
-
-    let html = `<div class="plgrid">`;
-    for(const p of list){
-      const thumb = p.thumb_video_id ? ytVideoThumb(p.thumb_video_id, "mqdefault") : "";
-      const d = fmtDate(p.published_at);
-      const count = (p.item_count ?? null);
-
-      html += `
-        <div class="pl">
-          ${thumb ? `
-            <img class="thumb16x9" loading="lazy" decoding="async"
-                 src="${esc(thumb)}"
-                 onerror="this.style.display='none'" />
-          ` : `
-            <div class="thumb16x9" aria-hidden="true"></div>
-          `}
-          <div class="ptext">
-            <div class="title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.title || p.playlist_id)}</div>
-            <div class="meta muted" style="margin-top:6px">
-              <span class="pill">${esc(p.playlist_id)}</span>
-              ${count!==null ? `<span class="pill">${count} סרטונים</span>` : ``}
-              ${d ? `<span class="pill">${esc(d)}</span>` : ``}
-              <a class="pill" target="_blank" href="https://www.youtube.com/playlist?list=${encodeURIComponent(p.playlist_id)}">פתח</a>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    html += `</div>`;
-
-    if(playlists.length > 60){
-      html += `<div class="muted" style="margin-top:8px">מוצגים 60 ראשונים מתוך ${playlists.length}.</div>`;
-    }
-    return html;
-  }
-
-  function renderVideos(videos){
-    if(!videos || videos.length===0){
-      return `<div class="muted">עדיין אין סרטונים במסד עבור הערוץ הזה.</div>`;
-    }
-
-    let html = `<div class="videos">`;
-    for(const v of videos){
-      const d = fmtDate(v.published_at);
-      const thumb = ytVideoThumb(v.video_id, "mqdefault");
-
-      html += `
-        <div class="video">
-          <img class="thumb16x9" loading="lazy" decoding="async"
-               src="${esc(thumb)}"
-               onerror="this.style.display='none'" />
-          <div class="vtext">
-            <div class="title">${esc(v.title)}</div>
-            <div class="meta muted">
-              <span class="pill">${esc(v.video_id)}</span>
-              ${d ? `<span class="pill">${esc(d)}</span>` : ``}
-              <a class="pill" target="_blank" href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}">צפה</a>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    html += `</div>`;
-    return html;
-  }
-
-  async function openChannel(channel_id){
-    state.selectedChannelId = channel_id;
-    $('rightTitle').textContent = 'ערוץ';
-    $('hint').textContent = 'פלייליסטים וסרטונים אחרונים מהערוץ.';
-    $('content').innerHTML = '<div class="muted">טוען…</div>';
-
-    const data = await api(`/api/channel?channel_id=${encodeURIComponent(channel_id)}`);
-    const ch = data.channel;
-
-    const back = data.backfill
-      ? `<span class="pill">ייבוא: ${data.backfill.done ? 'הושלם' : 'רץ'}</span>
-         <span class="pill">נספר: ${data.backfill.imported_count}</span>`
-      : `<span class="pill">ייבוא: לא התחיל</span>`;
-
-    const playlists = data.playlists || [];
-    const vids = data.videos || [];
-
-    const channelAvatar = ch.thumbnail_url ? `
-      <img class="avatar" style="width:56px;height:56px;border-radius:14px"
-           loading="lazy" decoding="async"
-           src="${esc(ch.thumbnail_url)}"
-           onerror="this.style.display='none'" />
-    ` : `<div class="avatar" style="width:56px;height:56px;border-radius:14px"></div>`;
-
-    let html = `
-      <div class="row" style="justify-content:space-between">
-        <div class="row" style="gap:12px;align-items:center;min-width:0">
-          ${channelAvatar}
-          <div style="min-width:0">
-            <div class="title" style="font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              ${esc(ch.title || ch.channel_id)}
-            </div>
-            <div class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ch.channel_id)}</div>
-          </div>
-        </div>
-        <div class="row">
-          ${back}
-          <a class="pill" target="_blank" href="https://www.youtube.com/channel/${encodeURIComponent(ch.channel_id)}">פתח ביוטיוב</a>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="sectionTitle">פלייליסטים</div>
-      ${renderPlaylists(playlists)}
-
-      <div class="hr"></div>
-
-      <div class="sectionTitle">סרטונים אחרונים</div>
-      ${renderVideos(vids)}
-    `;
-
-    $('content').innerHTML = html;
-  }
-
-  async function doSearch(){
-    const q = $('q').value.trim();
-    const channel_id = $('filter').value.trim();
-    $('rightTitle').textContent = 'חיפוש';
-    $('hint').textContent = channel_id ? 'חיפוש בתוך ערוץ נבחר.' : 'חיפוש בכל הערוצים.';
-
-    if(!q){
-      $('content').innerHTML = '<div class="muted">הכנס מילת חיפוש.</div>';
-      return;
-    }
-
-    $('content').innerHTML = '<div class="muted">מחפש…</div>';
-    const data = await api(`/api/search?q=${encodeURIComponent(q)}${channel_id?`&channel_id=${encodeURIComponent(channel_id)}`:''}`);
-    const results = data.results || [];
-
-    if(results.length===0){
-      $('content').innerHTML = '<div class="muted">אין תוצאות.</div>';
-      return;
-    }
-
-    let html = `<div class="videos">`;
-    for(const r of results){
-      const d = fmtDate(r.published_at);
-      const thumb = ytVideoThumb(r.video_id, "mqdefault");
-
-      html += `
-        <div class="video">
-          <img class="thumb16x9" loading="lazy" decoding="async"
-               src="${esc(thumb)}"
-               onerror="this.style.display='none'" />
-          <div class="vtext">
-            <div class="title">${esc(r.title)}</div>
-            <div class="meta muted">
-              <span class="pill">${esc(r.video_id)}</span>
-              ${d ? `<span class="pill">${esc(d)}</span>` : ``}
-              <span class="pill">${esc(r.channel_title || r.channel_id)}</span>
-              <a class="pill" target="_blank" href="https://www.youtube.com/watch?v=${encodeURIComponent(r.video_id)}">צפה</a>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    html += `</div>`;
-    $('content').innerHTML = html;
-  }
-
-  refresh().catch(e=>{
-    $('status').textContent = 'שגיאה: ' + e.message;
-  });
-</script>
+  <script src="/app.js" defer></script>
 </body>
 </html>
