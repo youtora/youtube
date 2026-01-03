@@ -14,11 +14,29 @@ async function ytJson(url) {
   return JSON.parse(t);
 }
 
-// בחירת תמונת פלייליסט (שמור URL אחד בלבד)
-function pickPlaylistThumb(th) {
-  if (!th) return null;
-  // כדי לחסוך במשקל תמונות באתר: מעדיפים medium, אחר כך default, אחר כך high
-  return th.medium?.url || th.default?.url || th.high?.url || null;
+/** מוציא VIDEO_ID מתוך URL של ytimg, כדי לשמור רק מזהה */
+function extractVideoIdFromThumbUrl(url) {
+  if (!url) return null;
+  // https://i.ytimg.com/vi/VIDEO_ID/mqdefault.jpg
+  // https://i.ytimg.com/vi_webp/VIDEO_ID/...
+  const m = url.match(/\/vi(?:_webp)?\/([a-zA-Z0-9_-]{11})\//);
+  return m ? m[1] : null;
+}
+
+function pickPlaylistThumbVideoId(thumbnails) {
+  if (!thumbnails) return null;
+  const urls = [
+    thumbnails.medium?.url,
+    thumbnails.default?.url,
+    thumbnails.high?.url,
+    thumbnails.maxres?.url,
+  ].filter(Boolean);
+
+  for (const u of urls) {
+    const id = extractVideoIdFromThumbUrl(u);
+    if (id) return id;
+  }
+  return null;
 }
 
 async function importPlaylistsForChannel({ env, channel_int, channel_id, max_pages = 10 }) {
@@ -44,28 +62,29 @@ async function importPlaylistsForChannel({ env, channel_int, channel_id, max_pag
 
     for (const it of items) {
       const playlist_id = it?.id || null;
+      if (!playlist_id) continue;
+
       const title = (it?.snippet?.title || "").slice(0, 200) || null;
       const published_at = toUnixSeconds(it?.snippet?.publishedAt || null);
       const item_count = Number.isFinite(it?.contentDetails?.itemCount)
         ? it.contentDetails.itemCount
         : null;
 
-      const thumbnail_url = pickPlaylistThumb(it?.snippet?.thumbnails);
-
-      if (!playlist_id) continue;
+      // ✅ רק מזהה (לא URL)
+      const thumb_video_id = pickPlaylistThumbVideoId(it?.snippet?.thumbnails);
 
       stmts.push(
         env.DB.prepare(`
-          INSERT INTO playlists(playlist_id, channel_int, title, thumbnail_url, published_at, item_count, updated_at)
+          INSERT INTO playlists(playlist_id, channel_int, title, thumb_video_id, published_at, item_count, updated_at)
           VALUES(?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(playlist_id) DO UPDATE SET
             channel_int    = excluded.channel_int,
             title          = COALESCE(excluded.title, playlists.title),
-            thumbnail_url  = COALESCE(excluded.thumbnail_url, playlists.thumbnail_url),
+            thumb_video_id = COALESCE(excluded.thumb_video_id, playlists.thumb_video_id),
             published_at   = COALESCE(excluded.published_at, playlists.published_at),
             item_count     = COALESCE(excluded.item_count, playlists.item_count),
             updated_at     = excluded.updated_at
-        `).bind(playlist_id, channel_int, title, thumbnail_url, published_at, item_count, now)
+        `).bind(playlist_id, channel_int, title, thumb_video_id, published_at, item_count, now)
       );
 
       imported++;
@@ -80,9 +99,7 @@ async function importPlaylistsForChannel({ env, channel_int, channel_id, max_pag
   return { ok: true, imported };
 }
 
-/**
- * subscribe אידמפוטנטי: אם כבר active ויש עוד זמן -> לא שולח שוב
- */
+/** subscribe WebSub בצורה אידמפוטנטית (לא דורס active, ולא שולח שוב אם יש זמן) */
 async function subscribeWebSub({ env, request, channel_id, channel_int }) {
   const t = nowSec();
   const origin = new URL(request.url).origin;
@@ -116,7 +133,6 @@ async function subscribeWebSub({ env, request, channel_id, channel_int }) {
 
   const last_error = res.ok ? null : `hub subscribe failed: ${res.status}`;
 
-  // לא לדרוס active
   await env.DB.prepare(`
     INSERT INTO subscriptions(topic_url, channel_int, status, last_subscribed_at, last_error)
     VALUES(?, ?, 'pending', ?, ?)
@@ -147,6 +163,7 @@ export async function onRequest({ env, request }) {
 
   const t = nowSec();
 
+  // מושכים title/thumb/uploads לערוץ
   let title = null, thumb = null, uploads = null;
 
   if (env.YT_API_KEY) {
@@ -163,7 +180,7 @@ export async function onRequest({ env, request }) {
     uploads = item?.contentDetails?.relatedPlaylists?.uploads || null;
   }
 
-  // channels
+  // upsert channels
   await env.DB.prepare(`
     INSERT INTO channels(channel_id, title, thumbnail_url, is_active, created_at, updated_at)
     VALUES(?, ?, ?, 1, ?, ?)
@@ -187,10 +204,10 @@ export async function onRequest({ env, request }) {
       updated_at = excluded.updated_at
   `).bind(channel_int, uploads, t).run();
 
-  // subscribe WebSub (אידמפוטנטי)
-  const sub = await subscribeWebSub({ env, request, channel_id, channel_int });
+  // subscribe
+  const websub = await subscribeWebSub({ env, request, channel_id, channel_int });
 
-  // import playlists + thumbnails
+  // playlists import (רק מזהה לתמונה)
   const playlists = await importPlaylistsForChannel({
     env,
     channel_int,
@@ -204,7 +221,7 @@ export async function onRequest({ env, request }) {
     channel_int,
     title,
     uploads_playlist_id: uploads,
-    websub: sub,
+    websub,
     playlists
   });
 }
