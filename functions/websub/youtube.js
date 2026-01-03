@@ -1,3 +1,5 @@
+// functions/websub/youtube.js
+
 function nowSec(){ return Math.floor(Date.now()/1000); }
 function toUnixSeconds(iso){ const ms=Date.parse(iso||""); return Number.isFinite(ms)?Math.floor(ms/1000):null; }
 
@@ -46,7 +48,7 @@ function topicFromLinkHeader(linkHeader){
 export async function onRequest({ env, request }) {
   const url = new URL(request.url);
 
-  // GET אימות
+  // GET אימות (Hub -> callback)
   if (request.method === "GET") {
     const topic = url.searchParams.get("hub.topic") || "";
     const challenge = url.searchParams.get("hub.challenge") || "";
@@ -64,15 +66,23 @@ export async function onRequest({ env, request }) {
     let channel_id = null;
     try { channel_id = new URL(topic).searchParams.get("channel_id"); } catch {}
 
-    if (channel_id && lease > 0) {
+    // קריטי: מסמנים ACTIVE גם אם lease_seconds חסר/0 (אחרת נתקעים על pending)
+    if (channel_id) {
       const ch = await env.DB.prepare(`SELECT id FROM channels WHERE channel_id=? AND is_active=1`)
         .bind(channel_id).first();
+
       if (ch) {
+        const lease_expires_at = lease > 0 ? (nowSec() + lease) : null;
+
         await env.DB.prepare(`
-          UPDATE subscriptions
-          SET status='active', lease_expires_at=?, last_error=NULL
-          WHERE topic_url=?
-        `).bind(nowSec() + lease, topic).run();
+          INSERT INTO subscriptions(topic_url, channel_int, status, lease_expires_at, last_error)
+          VALUES(?, ?, 'active', ?, NULL)
+          ON CONFLICT(topic_url) DO UPDATE SET
+            channel_int = excluded.channel_int,
+            status = 'active',
+            lease_expires_at = COALESCE(excluded.lease_expires_at, subscriptions.lease_expires_at),
+            last_error = NULL
+        `).bind(topic, ch.id, lease_expires_at).run();
       }
     }
 
@@ -87,7 +97,7 @@ export async function onRequest({ env, request }) {
     });
   }
 
-  // POST התראות
+  // POST התראות (Hub -> callback)
   if (request.method === "POST") {
     const bodyBuf = await request.arrayBuffer();
     const bodyU8 = new Uint8Array(bodyBuf);
@@ -133,7 +143,7 @@ export async function onRequest({ env, request }) {
       // רק אם זה אותו ערוץ (בטיחות)
       if (e.channelId !== channel_id) continue;
 
-      // חיסכון במקום: אפשר לקצץ כותרת ארוכה מאוד
+      // חיסכון במקום: לקצץ כותרת ארוכה
       const title = (e.title || "").slice(0, 200);
 
       stmts.push(
