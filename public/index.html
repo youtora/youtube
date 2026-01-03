@@ -25,6 +25,13 @@
     .video .meta{margin-top:6px}
     .pill{display:inline-block;padding:2px 8px;border:1px solid #ddd;border-radius:999px;font-size:12px;color:#444}
     .hr{height:1px;background:#eee;margin:10px 0}
+
+    /* playlists */
+    details.playlists{border:1px solid #eee;border-radius:12px;padding:10px}
+    details.playlists summary{cursor:pointer;font-weight:600}
+    .pl-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:260px;overflow:auto}
+    .pl-item{border:1px solid #f0f0f0;border-radius:10px;padding:10px}
+    .pl-meta{margin-top:6px}
   </style>
 </head>
 <body>
@@ -88,7 +95,7 @@
     renderChannels();
     renderFilter();
     $('status').textContent = `נטענו ${state.channels.length} ערוצים`;
-    $('hint').textContent = 'בחר ערוץ כדי לראות את הסרטונים האחרונים, או חפש בכותרות.';
+    $('hint').textContent = 'בחר ערוץ כדי לראות סרטונים ופלייליסטים, או חפש בכותרות.';
   }
 
   function renderChannels(){
@@ -129,10 +136,15 @@
     }
   }
 
+  function youtubePlaylistUrl(playlistId){
+    // תצוגת פלייליסט ביוטיוב
+    return `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+  }
+
   async function openChannel(channel_id){
     state.selectedChannelId = channel_id;
     $('rightTitle').textContent = 'ערוץ';
-    $('hint').textContent = 'סרטונים אחרונים מהערוץ (ממויין לפי תאריך העלאה).';
+    $('hint').textContent = 'פלייליסטים + סרטונים אחרונים (ממויין לפי תאריך העלאה).';
     $('content').innerHTML = '<div class="muted">טוען…</div>';
 
     const data = await api(`/api/channel?channel_id=${encodeURIComponent(channel_id)}`);
@@ -143,7 +155,9 @@
          <span class="pill">נספר: ${data.backfill.imported_count}</span>`
       : `<span class="pill">ייבוא: לא התחיל</span>`;
 
+    const playlists = data.playlists || [];
     const vids = data.videos || [];
+
     let html = `
       <div class="row" style="justify-content:space-between">
         <div>
@@ -156,8 +170,42 @@
         </div>
       </div>
       <div class="hr"></div>
-      <div class="videos">
     `;
+
+    // ===== Playlists (NEW) =====
+    html += `
+      <details class="playlists" ${playlists.length ? "" : ""}>
+        <summary>פלייליסטים (${playlists.length})</summary>
+        <div class="pl-list">
+    `;
+
+    if(playlists.length===0){
+      html += `<div class="muted">אין פלייליסטים במסד לערוץ הזה (או שעדיין לא יובאו).</div>`;
+    } else {
+      for(const p of playlists){
+        const d = fmtDate(p.published_at);
+        const count = (p.item_count ?? null);
+        html += `
+          <div class="pl-item">
+            <div class="title">${esc(p.title || p.playlist_id)}</div>
+            <div class="pl-meta muted">
+              <span class="pill">${esc(p.playlist_id)}</span>
+              ${d ? `<span class="pill">${esc(d)}</span>` : ``}
+              ${count !== null ? `<span class="pill">${count} סרטונים</span>` : ``}
+              <a class="pill" target="_blank" href="${youtubePlaylistUrl(p.playlist_id)}">פתח</a>
+            </div>
+          </div>
+        `;
+      }
+    }
+    html += `
+        </div>
+      </details>
+      <div class="hr"></div>
+    `;
+
+    // ===== Videos =====
+    html += `<div class="muted">סרטונים אחרונים (${vids.length})</div><div class="videos">`;
 
     if(vids.length===0){
       html += `<div class="muted">עדיין אין סרטונים במסד עבור הערוץ הזה.</div>`;
@@ -177,6 +225,7 @@
       }
     }
     html += `</div>`;
+
     $('content').innerHTML = html;
   }
 
