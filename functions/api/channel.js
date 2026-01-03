@@ -6,7 +6,7 @@ export async function onRequest({ env, request }) {
   const ch = await env.DB.prepare(`
     SELECT id, channel_id, title, thumbnail_url
     FROM channels
-    WHERE channel_id = ? AND is_active = 1
+    WHERE channel_id=? AND is_active=1
   `).bind(channel_id).first();
 
   if (!ch) return new Response("not found", { status: 404 });
@@ -14,13 +14,21 @@ export async function onRequest({ env, request }) {
   const backfill = await env.DB.prepare(`
     SELECT done, imported_count, updated_at
     FROM channel_backfill
-    WHERE channel_int = ?
+    WHERE channel_int=?
   `).bind(ch.id).first();
 
-  const vids = await env.DB.prepare(`
+  const playlists = await env.DB.prepare(`
+    SELECT playlist_id, title, published_at, item_count
+    FROM playlists
+    WHERE channel_int=?
+    ORDER BY (published_at IS NULL), published_at DESC, id DESC
+    LIMIT 200
+  `).bind(ch.id).all();
+
+  const videos = await env.DB.prepare(`
     SELECT video_id, title, published_at
     FROM videos
-    WHERE channel_int = ?
+    WHERE channel_int=?
     ORDER BY (published_at IS NULL), published_at DESC, id DESC
     LIMIT 50
   `).bind(ch.id).all();
@@ -28,6 +36,7 @@ export async function onRequest({ env, request }) {
   return Response.json({
     channel: ch,
     backfill: backfill || null,
-    videos: vids.results
+    playlists: playlists.results,
+    videos: videos.results
   });
 }
