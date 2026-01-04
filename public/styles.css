@@ -10,6 +10,7 @@
 }
 
 *{box-sizing:border-box}
+img{max-width:100%}
 body{
   margin:0;
   font-family: system-ui, Arial, sans-serif;
@@ -20,6 +21,7 @@ body{
 a{color:inherit; text-decoration:none}
 a:hover{text-decoration:underline}
 
+/* ===== TOP BAR ===== */
 .topbar{
   position:sticky; top:0; z-index:10;
   display:flex; align-items:center; gap:12px;
@@ -34,6 +36,7 @@ a:hover{text-decoration:underline}
   font-weight: 900;
   padding:8px 10px;
   border-radius: 999px;
+  white-space:nowrap;
 }
 .brand:hover{background:var(--soft); text-decoration:none}
 .logoDot{
@@ -55,6 +58,7 @@ a:hover{text-decoration:underline}
   outline:none;
   font-size:16px;
   background: var(--panel);
+  min-width: 160px;
 }
 .search button{
   padding:10px 14px;
@@ -74,11 +78,13 @@ a:hover{text-decoration:underline}
   border-radius:999px;
   color: var(--muted);
   font-size:14px;
+  white-space:nowrap;
 }
 .navLink:hover{background:var(--soft); text-decoration:none}
 
+/* ===== MAIN SHELL ===== */
 .shell{
-  max-width: 1280px;
+  max-width: 1380px;   /* קצת יותר רחב — מרגיש יותר כמו יוטיוב */
   margin: 14px auto;
   padding: 0 14px 20px;
 }
@@ -95,6 +101,7 @@ a:hover{text-decoration:underline}
 .sub{margin:0; color:var(--muted)}
 .hr{height:1px; background:var(--border); margin:12px 0}
 
+/* ===== GRID CARDS ===== */
 .grid{
   display:grid;
   grid-template-columns: repeat(4, 1fr);
@@ -112,14 +119,23 @@ a:hover{text-decoration:underline}
 }
 .card:hover{filter:brightness(.995)}
 .cardBody{padding:10px}
+
+/* כותרת כמו יוטיוב: 2 שורות */
 .cardTitle{
   font-weight: 900;
   margin:0 0 6px;
-  white-space:nowrap;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
   overflow:hidden;
-  text-overflow:ellipsis;
 }
-.cardMeta{display:flex; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--muted)}
+.cardMeta{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:var(--muted);
+}
 
 .thumb16x9{
   width:100%;
@@ -139,8 +155,16 @@ a:hover{text-decoration:underline}
   flex:0 0 auto;
 }
 
-/* Channel tabs */
-.tabs{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+/* ===== CHANNEL TABS ===== */
+.tabs{
+  display:flex;
+  gap:8px;
+  margin-top:10px;
+  overflow:auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom:2px;
+}
+.tabs::-webkit-scrollbar{height:0}
 .tab{
   border:1px solid var(--border);
   background: var(--soft);
@@ -148,64 +172,10 @@ a:hover{text-decoration:underline}
   border-radius: 999px;
   font-weight: 800;
   font-size:14px;
+  flex:0 0 auto;
 }
 .tab.active{background:#111;color:#fff;border-color:#111}
 .tab:hover{text-decoration:none; filter:brightness(.98)}
-
-/* WATCH PAGE (כמו יוטיוב ב-RTL):
-   סרטון גדול בימין, מוצעים בשמאל */
-.watchLayout{
-  display:grid;
-  grid-template-columns: 1fr 380px; /* 1fr = ימין (ב-RTL), 380 = שמאל */
-  gap:16px;
-  align-items:start;
-}
-@media (max-width: 980px){
-  .watchLayout{grid-template-columns: 1fr}
-}
-
-.player{
-  width:100%;
-  aspect-ratio: 16/9;
-  border:0;
-  border-radius: 14px;
-  overflow:hidden;
-  background:#000;
-}
-
-.watchSide{
-  border-inline-start: 1px solid var(--border); /* ב-RTL זה קו בין ימין לשמאל */
-  padding-inline-start: 12px;
-}
-@media (max-width: 980px){
-  .watchSide{border-inline-start:0; padding-inline-start:0}
-}
-
-.reco{
-  display:flex; gap:10px; align-items:flex-start;
-  padding:10px 0;
-  border-bottom:1px solid #f2f2f2;
-}
-.recoThumb{
-  width:160px;
-  aspect-ratio: 16/9;
-  border-radius: 12px;
-  object-fit:cover;
-  background:#eee;
-  border:1px solid #f0f0f0;
-  flex:0 0 auto;
-}
-@media (max-width: 980px){
-  .recoThumb{width:140px}
-}
-.recoTitle{
-  font-weight:900;
-  margin:0 0 6px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.recoMeta{color:var(--muted); font-size:12px}
 
 .btnRow{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
 .btn{
@@ -217,3 +187,105 @@ a:hover{text-decoration:underline}
   font-weight:700;
 }
 .btn:hover{text-decoration:none; filter:brightness(.98)}
+
+/* ===== WATCH PAGE (RTL כמו יוטיוב) ===== */
+.watchLayout{
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) 380px; /* main (ימין) + side (שמאל) */
+  gap:16px;
+  align-items:start;
+}
+.watchMain{min-width:0}
+.watchSide{
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 12px;
+}
+
+/* נגן */
+.player{
+  width:100%;
+  aspect-ratio: 16/9;
+  border:0;
+  border-radius: 14px;
+  overflow:hidden;
+  background:#000;
+}
+
+/* רשימת מוצעים – קומפקט כמו יוטיוב */
+.reco{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:10px 0;
+  border-bottom:1px solid #f2f2f2;
+}
+.recoThumb{
+  width:168px;
+  aspect-ratio: 16/9;
+  border-radius: 12px;
+  object-fit:cover;
+  background:#eee;
+  border:1px solid #f0f0f0;
+  flex:0 0 auto;
+}
+.recoTitle{
+  font-weight:900;
+  margin:0 0 6px;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+}
+.recoMeta{color:var(--muted); font-size:12px}
+
+/* ===== MOBILE FIXES (כל האתר) ===== */
+@media (max-width: 900px){
+  .watchLayout{grid-template-columns: 1fr}     /* מוצעים יורדים למטה */
+  .watchSide{
+    border-inline-start:0;
+    padding-inline-start:0;
+    border-top:1px solid var(--border);
+    margin-top:12px;
+    padding-top:12px;
+  }
+}
+
+/* header במובייל */
+@media (max-width: 720px){
+  .topbar{
+    flex-wrap:wrap;
+    gap:8px;
+    padding:10px 10px;
+  }
+  .brand{order:1}
+  .nav{
+    order:2;
+    width:100%;
+    flex-wrap:nowrap;
+    overflow:auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav::-webkit-scrollbar{height:0}
+  .search{
+    order:3;
+    width:100%;
+    max-width:none;
+  }
+
+  .shell{
+    padding:0;           /* אין רווחים מוזרים במובייל */
+    margin: 10px auto;
+  }
+  .page{
+    border-radius:0;     /* יותר "אפליקציה" */
+    border-left:0;
+    border-right:0;
+    box-shadow:none;
+  }
+  .pad{padding:12px}
+}
+
+/* מוצעים במובייל – thumb קטן יותר */
+@media (max-width: 520px){
+  .recoThumb{width:140px}
+}
