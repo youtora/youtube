@@ -1,477 +1,867 @@
-const $ = (id) => document.getElementById(id);
+/* SPA + Infinite Scroll (RTL, יוטיוב-סטייל) */
 
-function esc(s){return (s||"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]))}
-function fmtDate(unix){
-  if(!unix) return "";
-  try { return new Date(unix*1000).toLocaleDateString('he-IL', { year:'numeric', month:'2-digit', day:'2-digit' }); }
-  catch { return ""; }
-}
-function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
+const app = document.getElementById("app");
+const navHome = document.getElementById("navHome");
+const navChannels = document.getElementById("navChannels");
+const navPlaylists = document.getElementById("navPlaylists");
 
-async function api(url){
-  const r = await fetch(url);
-  const t = await r.text();
-  if(!r.ok) throw new Error(`${r.status} ${t.slice(0,200)}`);
-  return JSON.parse(t);
-}
+const searchForm = document.getElementById("searchForm");
+const searchInput = document.getElementById("searchInput");
 
-function setPage(inner){
-  $("page").innerHTML = `<div class="pad">${inner}</div>`;
-}
+let currentCleanup = null;
+let currentAbort = null;
 
-function navigate(path){
-  history.pushState({}, "", path);
-  render().catch(showErr);
+function setActiveNav(pathname) {
+  const p = pathname || "/";
+  navHome.classList.toggle("active", p === "/");
+  navChannels.classList.toggle("active", p === "/channels");
+  navPlaylists.classList.toggle("active", p === "/playlists");
 }
 
-function hookLinks(){
-  document.addEventListener("click", (e)=>{
-    const a = e.target.closest("a");
-    if(!a) return;
-    const href = a.getAttribute("href") || "";
-    const target = a.getAttribute("target");
-    if(target === "_blank") return;
-    if(!href.startsWith("/")) return;
-    if(!a.hasAttribute("data-link")) return;
-    e.preventDefault();
-    navigate(href);
-  });
+function navigate(to) {
+  if (to === location.pathname + location.search) return;
+  history.pushState({}, "", to);
+  route();
 }
 
-window.addEventListener("popstate", ()=>render().catch(showErr));
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-nav]");
+  if (!a) return;
 
-function route(){
-  const p = location.pathname.replace(/\/+$/,"") || "/";
-  const parts = p.split("/").filter(Boolean);
-  const qs = new URLSearchParams(location.search);
-  return { p, parts, qs };
+  // allow new tab / modifier keys
+  if (a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+  e.preventDefault();
+  navigate(a.getAttribute("href"));
+});
+
+searchForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = (searchInput.value || "").trim();
+  if (!q) return;
+  navigate(`/search?q=${encodeURIComponent(q)}`);
+});
+
+window.addEventListener("popstate", route);
+
+function escapeHtml(s) {
+  return (s ?? "")
+    .toString()
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function showErr(err){
-  setPage(`<div class="h1">שגיאה</div><p class="sub">${esc(err?.message || String(err))}</p>`);
+function fmtDate(sec) {
+  if (!sec) return "";
+  const d = new Date(sec * 1000);
+  try {
+    return d.toLocaleDateString("he-IL", { year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
 }
 
-function headerSearch(){
-  const form = $("searchForm");
-  const input = $("searchInput");
-  if (!form || !input) return;
-  form.onsubmit = (e)=>{
-    e.preventDefault();
-    const q = (input.value||"").trim();
-    if(!q) return;
-    navigate(`/search?q=${encodeURIComponent(q)}`);
-  };
+function videoThumb(video_id) {
+  return `https://i.ytimg.com/vi/${encodeURIComponent(video_id)}/mqdefault.jpg`;
 }
 
-function renderVideoCard(v){
-  const thumb = ytVideoThumb(v.video_id);
-  const d = fmtDate(v.published_at);
+function pickPlaylistThumbVideoId(p) {
+  // API יכול להחזיר thumb_video_id (מומלץ), ואם לא – ננסה חילוץ מ-thumbnail_url (אופציונלי)
+  const v = p?.thumb_video_id || p?.thumbnail_video_id || p?.thumbnailVideoId || null;
+  if (v) return v;
+
+  const url = p?.thumbnail_url || p?.thumbnailUrl || null;
+  if (!url) return null;
+  const m = String(url).match(/\/vi\/([^/]+)\//);
+  return m ? m[1] : null;
+}
+
+function channelThumbUrl(ch) {
+  return ch?.thumbnail_url || ch?.thumbnailUrl || ch?.channel_thumbnail_url || ch?.channel_thumbnail || null;
+}
+
+function apiThumbUrlFromChannelRow(ch) {
+  return ch?.thumbnail_url || ch?.thumbnailUrl || null;
+}
+
+function cardVideo(v) {
+  const title = v?.title || "";
+  const video_id = v?.video_id || v?.videoId || "";
+  const channel_id = v?.channel_id || v?.channelId || "";
+  const channel_title = v?.channel_title || v?.channelTitle || "";
+  const channel_thumb = v?.channel_thumbnail_url || v?.channel_thumbnail || null;
+  const published_at = v?.published_at || v?.publishedAt || null;
+
   return `
-    <a class="card" href="/${encodeURIComponent(v.video_id)}" data-link>
-      <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
+    <a class="card" href="/${encodeURIComponent(video_id)}" data-nav>
+      <span class="thumb">
+        <img loading="lazy" src="${videoThumb(video_id)}" alt="">
+      </span>
       <div class="cardBody">
-        <div class="cardTitle">${esc(v.title || v.video_id)}</div>
-        <div class="cardMeta">
-          ${v.channel_title || v.channel_id ? `<span>${esc(v.channel_title || v.channel_id)}</span>` : ``}
-          ${d ? `<span>${esc(d)}</span>` : ``}
+        <p class="title">${escapeHtml(title)}</p>
+        <div class="row">
+          <span class="avatar">${channel_thumb ? `<img loading="lazy" src="${escapeHtml(channel_thumb)}" alt="">` : ""}</span>
+          <div class="meta" style="min-width:0;flex:1">
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeHtml(channel_title || channel_id)}
+            </span>
+            <span>•</span>
+            <span>${escapeHtml(fmtDate(published_at))}</span>
+          </div>
         </div>
       </div>
     </a>
   `;
 }
 
-/* ---------- HOME: Load more ---------- */
-let homeState = { cursor: null, loading: false, done: false, token: 0 };
+function cardChannel(ch) {
+  const channel_id = ch?.channel_id || ch?.channelId || "";
+  const title = ch?.title || "";
+  const thumb = apiThumbUrlFromChannelRow(ch);
 
-async function pageHome(){
-  homeState = { cursor: null, loading: false, done: false, token: homeState.token + 1 };
-  const t = homeState.token;
-
-  setPage(`
-    <div class="h1">בית</div>
-    <p class="sub">הסרטונים האחרונים מכל הערוצים</p>
-    <div class="hr"></div>
-
-    <div id="homeGrid" class="grid"></div>
-
-    <div class="btnRow" style="margin-top:14px">
-      <button id="homeMoreBtn" class="btn" type="button">טען עוד</button>
-    </div>
-
-    <div id="homeHint" class="muted" style="margin-top:8px"></div>
-  `);
-
-  const btn = document.getElementById("homeMoreBtn");
-  btn.onclick = () => homeLoadMore(t);
-
-  await homeLoadMore(t);
+  return `
+    <a class="card" href="/${encodeURIComponent(channel_id)}" data-nav>
+      <span class="thumb" style="aspect-ratio: 16/9; display:flex; align-items:center; justify-content:center;">
+        <span class="avatar" style="width:84px;height:84px;">
+          ${thumb ? `<img loading="lazy" src="${escapeHtml(thumb)}" alt="">` : ""}
+        </span>
+      </span>
+      <div class="cardBody">
+        <p class="title" style="min-height:auto;-webkit-line-clamp:1">${escapeHtml(title || channel_id)}</p>
+        <div class="meta"><span class="chip">ערוץ</span></div>
+      </div>
+    </a>
+  `;
 }
 
-async function homeLoadMore(token){
-  if (homeState.loading || homeState.done) return;
-  homeState.loading = true;
+function cardPlaylist(p) {
+  const playlist_id = p?.playlist_id || p?.playlistId || "";
+  const title = p?.title || "";
+  const channel_id = p?.channel_id || p?.channelId || "";
+  const channel_title = p?.channel_title || p?.channelTitle || "";
+  const pub = p?.published_at || p?.publishedAt || null;
+  const thumbVid = pickPlaylistThumbVideoId(p);
 
-  const btn = document.getElementById("homeMoreBtn");
-  const hint = document.getElementById("homeHint");
-  const grid = document.getElementById("homeGrid");
+  return `
+    <a class="card" href="/${encodeURIComponent(playlist_id)}" data-nav>
+      <span class="thumb">
+        ${
+          thumbVid
+            ? `<img loading="lazy" src="${videoThumb(thumbVid)}" alt="">`
+            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#777">Playlist</div>`
+        }
+      </span>
+      <div class="cardBody">
+        <p class="title">${escapeHtml(title || playlist_id)}</p>
+        <div class="meta">
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:65%;">
+            ${escapeHtml(channel_title || channel_id)}
+          </span>
+          ${pub ? `<span>•</span><span>${escapeHtml(fmtDate(pub))}</span>` : ""}
+        </div>
+      </div>
+    </a>
+  `;
+}
 
-  btn.disabled = true;
-  hint.textContent = "טוען…";
+async function fetchJSON(url, { signal } = {}) {
+  const r = await fetch(url, { signal });
+  const t = await r.text();
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+  return JSON.parse(t);
+}
 
-  const url = `/api/latest?limit=24${homeState.cursor ? `&cursor=${encodeURIComponent(homeState.cursor)}` : ""}`;
-  const data = await api(url);
-
-  if (token !== homeState.token) return;
-
-  const vids = data.videos || [];
-  if (vids.length) {
-    grid.insertAdjacentHTML("beforeend", vids.map(renderVideoCard).join(""));
+function cleanupPage() {
+  if (currentCleanup) {
+    try { currentCleanup(); } catch {}
+    currentCleanup = null;
   }
-
-  homeState.cursor = data.next_cursor || null;
-  homeState.done = !homeState.cursor || vids.length === 0;
-
-  btn.disabled = false;
-  btn.style.display = homeState.done ? "none" : "inline-flex";
-  hint.textContent = homeState.done ? "סוף הרשימה." : "";
-
-  homeState.loading = false;
-}
-
-/* ---------- PAGES: channels list ---------- */
-async function pageChannels(){
-  setPage(`<div class="muted">טוען ערוצים…</div>`);
-  const data = await api(`/api/channels`);
-  const channels = data.channels || [];
-
-  setPage(`
-    <div class="h1">ערוצים</div>
-    <p class="sub">כל הערוצים במערכת</p>
-    <div class="hr"></div>
-
-    ${channels.length ? `
-      <div class="grid">
-        ${channels.map(ch=>`
-          <a class="card" href="/${encodeURIComponent(ch.channel_id)}/videos" data-link>
-            <div class="cardBody avatarRow">
-              ${ch.thumbnail_url ? `<img class="avatar" loading="lazy" decoding="async" src="${esc(ch.thumbnail_url)}" onerror="this.style.display='none'">`
-                                 : `<div class="avatar"></div>`}
-              <div style="min-width:0">
-                <div class="cardTitle" style="margin:0">${esc(ch.title || ch.channel_id)}</div>
-                <div class="cardMeta">${esc(ch.channel_id)}</div>
-              </div>
-            </div>
-          </a>
-        `).join("")}
-      </div>
-    ` : `<div class="muted">אין ערוצים עדיין.</div>`}
-  `);
-}
-
-/* ---------- PAGES: playlists list ---------- */
-async function pagePlaylists(){
-  setPage(`<div class="muted">טוען פלייליסטים…</div>`);
-  const data = await api(`/api/playlists?limit=60`);
-  const playlists = data.playlists || [];
-
-  setPage(`
-    <div class="h1">פלייליסטים</div>
-    <p class="sub">רשימת פלייליסטים מכל הערוצים</p>
-    <div class="hr"></div>
-
-    ${playlists.length ? `
-      <div class="grid">
-        ${playlists.map(p=>`
-          <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-            <img class="thumb16x9" loading="lazy" decoding="async"
-                 src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-                 onerror="this.style.display='none'">
-            <div class="cardBody">
-              <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
-              <div class="cardMeta">
-                <span>${esc(p.channel_title || p.channel_id)}</span>
-                ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
-              </div>
-            </div>
-          </a>
-        `).join("")}
-      </div>
-    ` : `<div class="muted">אין פלייליסטים עדיין.</div>`}
-  `);
-}
-
-/* ---------- SEARCH ---------- */
-async function pageSearch(q){
-  if(!q){
-    setPage(`<div class="h1">חיפוש</div><p class="sub">הקלד מילה בחיפוש למעלה.</p>`);
-    return;
+  if (currentAbort) {
+    try { currentAbort.abort(); } catch {}
+    currentAbort = null;
   }
-  const si = $("searchInput");
-  if (si) si.value = q;
-
-  setPage(`<div class="muted">מחפש…</div>`);
-  const data = await api(`/api/search?q=${encodeURIComponent(q)}`);
-  const results = data.results || [];
-
-  setPage(`
-    <div class="h1">תוצאות חיפוש</div>
-    <p class="sub">מילת חיפוש: <b>${esc(q)}</b></p>
-    <div class="hr"></div>
-
-    ${results.length ? `
-      <div class="grid">
-        ${results.map(r=>renderVideoCard(r)).join("")}
-      </div>
-    ` : `<div class="muted">אין תוצאות.</div>`}
-  `);
 }
 
-/* ---------- CHANNEL: Load more videos ---------- */
-let channelVideosState = { key: "", cursor: null, loading: false, done: false, token: 0 };
+function makeInfiniteScroll({ sentinel, loadMore, button }) {
+  // fallback button always works
+  button?.addEventListener("click", () => loadMore());
 
-async function pageChannel(channel_id, tab){
-  const activeTab = (tab === "playlists") ? "playlists" : "videos";
+  if (!("IntersectionObserver" in window)) return () => {};
 
-  setPage(`<div class="muted">טוען ערוץ…</div>`);
+  const io = new IntersectionObserver(
+    (entries) => {
+      const e = entries[0];
+      if (e && e.isIntersecting) loadMore();
+    },
+    { root: null, rootMargin: "900px 0px", threshold: 0.01 }
+  );
 
-  // עבור טאב סרטונים — לא צריך להביא פלייליסטים (חוסך שאילתות)
-  const include_playlists = activeTab === "playlists" ? "1" : "0";
-  const data = await api(`/api/channel?channel_id=${encodeURIComponent(channel_id)}&include_playlists=${include_playlists}&videos_limit=24`);
+  io.observe(sentinel);
+  return () => io.disconnect();
+}
 
-  const ch = data.channel;
-  const playlists = data.playlists || [];
+/* ---------------- Pages ---------------- */
 
-  const header = `
-    <div class="avatarRow">
-      ${ch.thumbnail_url ? `<img class="avatar" style="width:64px;height:64px" loading="lazy" decoding="async" src="${esc(ch.thumbnail_url)}" onerror="this.style.display='none'">`
-                         : `<div class="avatar" style="width:64px;height:64px"></div>`}
-      <div style="min-width:0">
-        <div class="h1" style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ch.title || ch.channel_id)}</div>
-        <p class="sub" style="margin-top:4px">${esc(ch.channel_id)}</p>
-      </div>
-    </div>
-
-    <div class="btnRow">
-      <a class="btn" target="_blank" rel="noreferrer" href="https://www.youtube.com/channel/${encodeURIComponent(ch.channel_id)}">פתח ביוטיוב</a>
-    </div>
-
-    <div class="tabs">
-      <a class="tab ${activeTab==="videos"?"active":""}" href="/${encodeURIComponent(channel_id)}/videos" data-link>סרטונים</a>
-      <a class="tab ${activeTab==="playlists"?"active":""}" href="/${encodeURIComponent(channel_id)}/playlists" data-link>פלייליסטים</a>
-    </div>
+async function pageHome() {
+  setActiveNav("/");
+  app.innerHTML = `
+    <h1 class="h1">סרטונים אחרונים</h1>
+    <div class="grid" id="list"></div>
+    <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+    <div class="sentinel" id="sentinel"></div>
   `;
 
-  if (activeTab === "playlists") {
-    setPage(`
-      ${header}
-      <div class="hr"></div>
-      ${playlists.length ? `
-        <div class="grid">
-          ${playlists.map(p=>`
-            <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-              <img class="thumb16x9" loading="lazy" decoding="async"
-                   src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-                   onerror="this.style.display='none'">
-              <div class="cardBody">
-                <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
-                <div class="cardMeta">
-                  ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
-                </div>
-              </div>
-            </a>
-          `).join("")}
-        </div>
-      ` : `<div class="muted">אין פלייליסטים (או עדיין לא נטענו).</div>`}
-    `);
+  const list = document.getElementById("list");
+  const btn = document.getElementById("btnMore");
+  const sentinel = document.getElementById("sentinel");
+
+  const state = { loading: false, done: false, cursor: null };
+
+  async function loadMore() {
+    if (state.loading || state.done) return;
+    state.loading = true;
+    btn.disabled = true;
+    btn.textContent = "טוען...";
+
+    try {
+      const url =
+        `/api/latest?limit=24` + (state.cursor ? `&cursor=${encodeURIComponent(state.cursor)}` : "");
+      const data = await fetchJSON(url, { signal: currentAbort.signal });
+
+      const videos = data?.videos || [];
+      const next = data?.next_cursor || data?.nextCursor || null;
+
+      if (!videos.length && !state.cursor) {
+        list.innerHTML = `<div class="empty">אין עדיין סרטונים במסד.</div>`;
+      } else {
+        const frag = document.createDocumentFragment();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = videos.map(cardVideo).join("");
+        while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+        list.appendChild(frag);
+      }
+
+      state.cursor = next;
+      if (!next || videos.length === 0) state.done = true;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      state.loading = false;
+      btn.disabled = false;
+      btn.textContent = state.done ? "אין עוד" : "טען עוד";
+      if (state.done) btn.style.display = "none";
+    }
+  }
+
+  currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+  await loadMore();
+}
+
+async function pageChannels() {
+  setActiveNav("/channels");
+  app.innerHTML = `
+    <h1 class="h1">ערוצים</h1>
+    <div class="grid" id="grid"></div>
+  `;
+
+  const grid = document.getElementById("grid");
+  const data = await fetchJSON("/api/channels", { signal: currentAbort.signal });
+  const channels = data?.channels || [];
+
+  if (!channels.length) {
+    grid.innerHTML = `<div class="empty">אין ערוצים עדיין.</div>`;
     return;
   }
 
-  // VIDEOS tab with Load More
-  channelVideosState = {
-    key: channel_id,
-    cursor: data.videos_next_cursor || null,
-    loading: false,
-    done: !data.videos_next_cursor,
-    token: channelVideosState.token + 1
-  };
-  const t = channelVideosState.token;
-
-  setPage(`
-    ${header}
-    <div class="hr"></div>
-
-    <div id="chGrid" class="grid">
-      ${(data.videos || []).map(v => renderVideoCard({ ...v, channel_id: ch.channel_id, channel_title: ch.title })).join("")}
-    </div>
-
-    <div class="btnRow" style="margin-top:14px">
-      <button id="chMoreBtn" class="btn" type="button" ${channelVideosState.done ? 'style="display:none"' : ""}>טען עוד</button>
-    </div>
-
-    <div id="chHint" class="muted" style="margin-top:8px"></div>
-  `);
-
-  const btn = document.getElementById("chMoreBtn");
-  btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title);
+  grid.innerHTML = channels.map(cardChannel).join("");
 }
 
-async function channelLoadMoreVideos(token, channel_id, channel_title){
-  if (channelVideosState.loading || channelVideosState.done) return;
-  if (channelVideosState.key !== channel_id) return;
+async function pagePlaylists() {
+  setActiveNav("/playlists");
+  app.innerHTML = `
+    <h1 class="h1">פלייליסטים</h1>
+    <div class="grid" id="grid"></div>
+    <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+    <div class="sentinel" id="sentinel"></div>
+  `;
 
-  channelVideosState.loading = true;
+  const grid = document.getElementById("grid");
+  const btn = document.getElementById("btnMore");
+  const sentinel = document.getElementById("sentinel");
 
-  const btn = document.getElementById("chMoreBtn");
-  const hint = document.getElementById("chHint");
-  const grid = document.getElementById("chGrid");
+  const state = { loading: false, done: false, cursor: null };
 
-  btn.disabled = true;
-  hint.textContent = "טוען…";
+  async function loadMore() {
+    if (state.loading || state.done) return;
+    state.loading = true;
+    btn.disabled = true;
+    btn.textContent = "טוען...";
 
+    try {
+      const url =
+        `/api/playlists?limit=24` + (state.cursor ? `&cursor=${encodeURIComponent(state.cursor)}` : "");
+      const data = await fetchJSON(url, { signal: currentAbort.signal });
+
+      const playlists = data?.playlists || [];
+      const next = data?.next_cursor || data?.nextCursor || null;
+
+      if (!playlists.length && !state.cursor) {
+        grid.innerHTML = `<div class="empty">אין פלייליסטים עדיין.</div>`;
+      } else {
+        const frag = document.createDocumentFragment();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = playlists.map(cardPlaylist).join("");
+        while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+        grid.appendChild(frag);
+      }
+
+      state.cursor = next;
+      if (!next || playlists.length === 0) state.done = true;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      state.loading = false;
+      btn.disabled = false;
+      btn.textContent = state.done ? "אין עוד" : "טען עוד";
+      if (state.done) btn.style.display = "none";
+    }
+  }
+
+  currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+  await loadMore();
+}
+
+async function pageSearch(q) {
+  setActiveNav("/search");
+  const qq = (q || "").trim();
+  searchInput.value = qq;
+
+  app.innerHTML = `
+    <h1 class="h1">חיפוש</h1>
+    <div class="muted" style="margin-bottom:10px">תוצאות עבור: <b>${escapeHtml(qq)}</b></div>
+    <div class="grid" id="grid"></div>
+    <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+    <div class="sentinel" id="sentinel"></div>
+  `;
+
+  const grid = document.getElementById("grid");
+  const btn = document.getElementById("btnMore");
+  const sentinel = document.getElementById("sentinel");
+
+  const state = { loading: false, done: false, cursor: null };
+
+  async function loadMore() {
+    if (state.loading || state.done) return;
+    if (!qq) {
+      grid.innerHTML = `<div class="empty">הקלד משהו בשורת החיפוש.</div>`;
+      btn.style.display = "none";
+      state.done = true;
+      return;
+    }
+
+    state.loading = true;
+    btn.disabled = true;
+    btn.textContent = "טוען...";
+
+    try {
+      const url =
+        `/api/search?q=${encodeURIComponent(qq)}&limit=24` +
+        (state.cursor ? `&cursor=${encodeURIComponent(state.cursor)}` : "");
+      const data = await fetchJSON(url, { signal: currentAbort.signal });
+
+      const videos = data?.videos || [];
+      const next = data?.next_cursor || data?.nextCursor || null;
+
+      if (!videos.length && !state.cursor) {
+        grid.innerHTML = `<div class="empty">לא נמצאו תוצאות.</div>`;
+      } else {
+        const frag = document.createDocumentFragment();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = videos.map(cardVideo).join("");
+        while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+        grid.appendChild(frag);
+      }
+
+      state.cursor = next;
+      if (!next || videos.length === 0) state.done = true;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      state.loading = false;
+      btn.disabled = false;
+      btn.textContent = state.done ? "אין עוד" : "טען עוד";
+      if (state.done) btn.style.display = "none";
+    }
+  }
+
+  currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+  await loadMore();
+}
+
+async function pageChannel(channel_id, tab = "videos") {
+  setActiveNav(""); // channel is not a top nav item
+
+  app.innerHTML = `
+    <div id="head"></div>
+    <div class="tabs">
+      <a href="/${encodeURIComponent(channel_id)}?tab=videos" data-nav id="tabVideos">סרטונים</a>
+      <a href="/${encodeURIComponent(channel_id)}?tab=playlists" data-nav id="tabPlaylists">פלייליסטים</a>
+    </div>
+    <div id="content"></div>
+  `;
+
+  const tabVideos = document.getElementById("tabVideos");
+  const tabPlaylists = document.getElementById("tabPlaylists");
+  tabVideos.classList.toggle("active", tab === "videos");
+  tabPlaylists.classList.toggle("active", tab === "playlists");
+
+  const head = document.getElementById("head");
+  const content = document.getElementById("content");
+
+  // fetch channel info + first page for selected tab
   const url =
     `/api/channel?channel_id=${encodeURIComponent(channel_id)}` +
-    `&include_channel=0&include_playlists=0&include_videos=1` +
-    `&videos_limit=24` +
-    (channelVideosState.cursor ? `&videos_cursor=${encodeURIComponent(channelVideosState.cursor)}` : "");
+    (tab === "videos" ? `&include_videos=1&videos_limit=24` : `&include_playlists=1&playlists_limit=24`);
+  const data = await fetchJSON(url, { signal: currentAbort.signal });
 
-  const data = await api(url);
-
-  if (token !== channelVideosState.token) return;
-
-  const vids = data.videos || [];
-  if (vids.length) {
-    const html = vids.map(v => renderVideoCard({ ...v, channel_id, channel_title })).join("");
-    grid.insertAdjacentHTML("beforeend", html);
+  const ch = data?.channel;
+  if (!ch) {
+    content.innerHTML = `<div class="empty">ערוץ לא נמצא.</div>`;
+    return;
   }
 
-  channelVideosState.cursor = data.videos_next_cursor || null;
-  channelVideosState.done = !channelVideosState.cursor || vids.length === 0;
-
-  btn.disabled = false;
-  btn.style.display = channelVideosState.done ? "none" : "inline-flex";
-  hint.textContent = channelVideosState.done ? "סוף הרשימה." : "";
-
-  channelVideosState.loading = false;
-}
-
-/* ---------- VIDEO PAGE ---------- */
-async function pageVideo(video_id){
-  setPage(`<div class="muted">טוען סרטון…</div>`);
-  const data = await api(`/api/video?video_id=${encodeURIComponent(video_id)}`);
-  const v = data.video;
-  const rec = data.recommended || [];
-
-  const player = `
-    <iframe class="player"
-      src="https://www.youtube.com/embed/${encodeURIComponent(v.video_id)}?rel=0"
-      title="YouTube video player"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowfullscreen></iframe>
+  const thumb = apiThumbUrlFromChannelRow(ch);
+  head.innerHTML = `
+    <div class="row" style="gap:12px; margin:10px 0 6px;">
+      <span class="avatar" style="width:64px;height:64px;">
+        ${thumb ? `<img loading="lazy" src="${escapeHtml(thumb)}" alt="">` : ""}
+      </span>
+      <div style="min-width:0">
+        <div style="font-size:20px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${escapeHtml(ch.title || ch.channel_id)}
+        </div>
+        <div class="muted" style="font-size:13px">Channel ID: ${escapeHtml(ch.channel_id)}</div>
+      </div>
+    </div>
   `;
 
-  setPage(`
-    <div class="watchLayout">
-      <section class="watchMain">
-        ${player}
-        <div class="h1" style="margin-top:10px">${esc(v.title || v.video_id)}</div>
-        <p class="sub">${fmtDate(v.published_at) ? `פורסם: ${esc(fmtDate(v.published_at))}` : ""}</p>
+  if (tab === "videos") {
+    content.innerHTML = `
+      <div class="grid" id="grid"></div>
+      <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+      <div class="sentinel" id="sentinel"></div>
+    `;
 
-        <div class="hr"></div>
+    const grid = document.getElementById("grid");
+    const btn = document.getElementById("btnMore");
+    const sentinel = document.getElementById("sentinel");
 
-        <div class="avatarRow">
-          ${v.thumbnail_url ? `<img class="avatar" loading="lazy" decoding="async" src="${esc(v.thumbnail_url)}" onerror="this.style.display='none'">`
-                            : `<div class="avatar"></div>`}
-          <div style="min-width:0">
-            <div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              <a href="/${encodeURIComponent(v.channel_id)}/videos" data-link>${esc(v.channel_title || v.channel_id)}</a>
-            </div>
-            <div class="muted" style="font-size:12px">${esc(v.channel_id)}</div>
-          </div>
+    const state = {
+      loading: false,
+      done: false,
+      cursor: data?.videos_next_cursor || null,
+      first: (data?.videos || []),
+    };
 
-          <div style="margin-inline-start:auto" class="btnRow">
-            <a class="btn" target="_blank" rel="noreferrer" href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}">פתח ביוטיוב</a>
-          </div>
+    if (!state.first.length) {
+      grid.innerHTML = `<div class="empty">אין סרטונים לערוץ הזה עדיין.</div>`;
+    } else {
+      grid.innerHTML = state.first.map(cardVideo).join("");
+    }
+
+    async function loadMore() {
+      if (state.loading || state.done) return;
+      if (!state.cursor) { state.done = true; btn.style.display="none"; return; }
+
+      state.loading = true;
+      btn.disabled = true;
+      btn.textContent = "טוען...";
+
+      try {
+        const more = await fetchJSON(
+          `/api/channel?channel_id=${encodeURIComponent(channel_id)}&include_videos=1&videos_limit=24&videos_cursor=${encodeURIComponent(state.cursor)}`,
+          { signal: currentAbort.signal }
+        );
+
+        const videos = more?.videos || [];
+        const next = more?.videos_next_cursor || null;
+
+        const frag = document.createDocumentFragment();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = videos.map(cardVideo).join("");
+        while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+        grid.appendChild(frag);
+
+        state.cursor = next;
+        if (!next || videos.length === 0) state.done = true;
+      } catch (err) {
+        console.error(err);
+      } finally {
+        state.loading = false;
+        btn.disabled = false;
+        btn.textContent = state.done ? "אין עוד" : "טען עוד";
+        if (state.done) btn.style.display = "none";
+      }
+    }
+
+    currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+
+  } else {
+    content.innerHTML = `
+      <div class="grid" id="grid"></div>
+      <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+      <div class="sentinel" id="sentinel"></div>
+    `;
+
+    const grid = document.getElementById("grid");
+    const btn = document.getElementById("btnMore");
+    const sentinel = document.getElementById("sentinel");
+
+    const state = {
+      loading: false,
+      done: false,
+      cursor: data?.playlists_next_cursor || null,
+      first: (data?.playlists || []),
+    };
+
+    if (!state.first.length) {
+      grid.innerHTML = `<div class="empty">אין פלייליסטים לערוץ הזה עדיין.</div>`;
+    } else {
+      grid.innerHTML = state.first.map(cardPlaylist).join("");
+    }
+
+    async function loadMore() {
+      if (state.loading || state.done) return;
+      if (!state.cursor) { state.done = true; btn.style.display="none"; return; }
+
+      state.loading = true;
+      btn.disabled = true;
+      btn.textContent = "טוען...";
+
+      try {
+        const more = await fetchJSON(
+          `/api/channel?channel_id=${encodeURIComponent(channel_id)}&include_playlists=1&playlists_limit=24&playlists_cursor=${encodeURIComponent(state.cursor)}`,
+          { signal: currentAbort.signal }
+        );
+
+        const playlists = more?.playlists || [];
+        const next = more?.playlists_next_cursor || null;
+
+        const frag = document.createDocumentFragment();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = playlists.map(cardPlaylist).join("");
+        while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+        grid.appendChild(frag);
+
+        state.cursor = next;
+        if (!next || playlists.length === 0) state.done = true;
+      } catch (err) {
+        console.error(err);
+      } finally {
+        state.loading = false;
+        btn.disabled = false;
+        btn.textContent = state.done ? "אין עוד" : "טען עוד";
+        if (state.done) btn.style.display = "none";
+      }
+    }
+
+    currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+  }
+}
+
+async function pagePlaylist(playlist_id) {
+  setActiveNav("");
+
+  app.innerHTML = `
+    <div id="head"></div>
+    <div class="tabs">
+      <a href="/${encodeURIComponent(playlist_id)}" data-nav class="active">סרטונים</a>
+    </div>
+    <div id="content"></div>
+  `;
+
+  const head = document.getElementById("head");
+  const content = document.getElementById("content");
+
+  const data = await fetchJSON(`/api/playlist?playlist_id=${encodeURIComponent(playlist_id)}&videos_limit=24`, {
+    signal: currentAbort.signal
+  });
+
+  const p = data?.playlist;
+  if (!p) {
+    content.innerHTML = `<div class="empty">פלייליסט לא נמצא.</div>`;
+    return;
+  }
+
+  const chThumb = channelThumbUrl(p);
+  const thumbVid = pickPlaylistThumbVideoId(p);
+
+  head.innerHTML = `
+    <div class="row" style="gap:12px; margin:10px 0 6px;">
+      <span class="avatar" style="width:64px;height:64px;border-radius:14px;">
+        ${
+          thumbVid
+            ? `<img loading="lazy" src="${videoThumb(thumbVid)}" alt="">`
+            : (chThumb ? `<img loading="lazy" src="${escapeHtml(chThumb)}" alt="">` : "")
+        }
+      </span>
+      <div style="min-width:0">
+        <div style="font-size:20px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${escapeHtml(p.title || p.playlist_id)}
         </div>
-      </section>
-
-      <aside class="watchSide">
-        <div style="font-weight:900;margin-bottom:8px">סרטונים מוצעים</div>
-        ${rec.length ? rec.map(r=>`
-          <a class="reco" href="/${encodeURIComponent(r.video_id)}" data-link>
-            <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
-            <div style="min-width:0">
-              <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""}</div>
-            </div>
+        <div class="muted" style="font-size:13px">
+          <a href="/${encodeURIComponent(p.channel_id)}" data-nav style="color:var(--link)">
+            ${escapeHtml(p.channel_title || p.channel_id)}
           </a>
-        `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+
+  content.innerHTML = `
+    <div class="grid" id="grid"></div>
+    <div class="loadMore"><button class="btn" id="btnMore">טען עוד</button></div>
+    <div class="sentinel" id="sentinel"></div>
+  `;
+
+  const grid = document.getElementById("grid");
+  const btn = document.getElementById("btnMore");
+  const sentinel = document.getElementById("sentinel");
+
+  const state = {
+    loading: false,
+    done: false,
+    cursor: data?.videos_next_cursor || null
+  };
+
+  const first = data?.videos || [];
+  if (!first.length) {
+    grid.innerHTML = `<div class="empty">אין סרטונים לפלייליסט הזה עדיין.</div>`;
+    btn.style.display = "none";
+    state.done = true;
+  } else {
+    grid.innerHTML = first.map(cardVideo).join("");
+  }
+
+  async function loadMore() {
+    if (state.loading || state.done) return;
+    if (!state.cursor) { state.done = true; btn.style.display="none"; return; }
+
+    state.loading = true;
+    btn.disabled = true;
+    btn.textContent = "טוען...";
+
+    try {
+      const more = await fetchJSON(
+        `/api/playlist?playlist_id=${encodeURIComponent(playlist_id)}&videos_limit=24&videos_cursor=${encodeURIComponent(state.cursor)}`,
+        { signal: currentAbort.signal }
+      );
+
+      const videos = more?.videos || [];
+      const next = more?.videos_next_cursor || null;
+
+      const frag = document.createDocumentFragment();
+      const tmp = document.createElement("div");
+      tmp.innerHTML = videos.map(cardVideo).join("");
+      while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+      grid.appendChild(frag);
+
+      state.cursor = next;
+      if (!next || videos.length === 0) state.done = true;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      state.loading = false;
+      btn.disabled = false;
+      btn.textContent = state.done ? "אין עוד" : "טען עוד";
+      if (state.done) btn.style.display = "none";
+    }
+  }
+
+  currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+}
+
+async function pageWatch(video_id) {
+  setActiveNav("");
+
+  app.innerHTML = `
+    <div class="watchLayout">
+      <section class="watchMain" id="main"></section>
+      <aside class="watchSide">
+        <div class="miniList" id="side"></div>
+        <div class="loadMore" style="justify-content:flex-start; margin-top:10px">
+          <button class="btn" id="btnMore">טען עוד</button>
+        </div>
+        <div class="sentinel" id="sentinel"></div>
       </aside>
     </div>
-  `);
-}
-
-/* ---------- PLAYLIST PAGE ---------- */
-function isChannelId(s){ return /^UC[a-zA-Z0-9_-]{20,}$/.test(s); }
-function isPlaylistId(s){ return /^PL[a-zA-Z0-9_-]{10,}$/.test(s); }
-function isVideoId(s){ return /^[a-zA-Z0-9_-]{11}$/.test(s); }
-
-async function pagePlaylist(playlist_id){
-  setPage(`<div class="muted">טוען פלייליסט…</div>`);
-  const data = await api(`/api/playlist?playlist_id=${encodeURIComponent(playlist_id)}`);
-  const p = data.playlist;
-
-  const player = `
-    <iframe class="player"
-      src="https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(p.playlist_id)}&rel=0"
-      title="YouTube playlist player"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowfullscreen></iframe>
   `;
 
-  setPage(`
-    <div class="h1">${esc(p.title || p.playlist_id)}</div>
-    <p class="sub">${esc(p.playlist_id)}</p>
+  const main = document.getElementById("main");
+  const side = document.getElementById("side");
+  const btn = document.getElementById("btnMore");
+  const sentinel = document.getElementById("sentinel");
 
-    <div class="btnRow">
-      <a class="btn" target="_blank" rel="noreferrer" href="https://www.youtube.com/playlist?list=${encodeURIComponent(p.playlist_id)}">פתח ביוטיוב</a>
-      <a class="btn" href="/${encodeURIComponent(p.channel_id)}/playlists" data-link>עוד פלייליסטים בערוץ</a>
-    </div>
+  const embed = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video_id)}?rel=0&modestbranding=1`;
+  main.innerHTML = `
+    <div class="player"><iframe src="${embed}" allowfullscreen></iframe></div>
+    <div id="meta"></div>
+  `;
 
-    <div class="hr"></div>
+  const meta = document.getElementById("meta");
 
-    ${player}
-  `);
+  // ננסה להביא פרטים + מוצעים
+  let info = null;
+  try {
+    info = await fetchJSON(`/api/video?video_id=${encodeURIComponent(video_id)}`, { signal: currentAbort.signal });
+  } catch {
+    // fallback: נשאיר רק נגן
+  }
+
+  const v = info?.video || null;
+  const suggestedFirst = info?.suggested || [];
+
+  if (v) {
+    meta.innerHTML = `
+      <div class="watchTitle">${escapeHtml(v.title || "")}</div>
+      <div class="watchBar">
+        <div class="row" style="gap:10px; min-width:0">
+          <span class="avatar">
+            ${
+              (v.channel_thumbnail_url || v.channel_thumbnail)
+                ? `<img loading="lazy" src="${escapeHtml(v.channel_thumbnail_url || v.channel_thumbnail)}" alt="">`
+                : ""
+            }
+          </span>
+          <div style="min-width:0">
+            <a href="/${encodeURIComponent(v.channel_id)}" data-nav style="display:block;color:var(--text);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${escapeHtml(v.channel_title || v.channel_id)}
+            </a>
+            <div class="muted" style="font-size:12px">${escapeHtml(fmtDate(v.published_at))}</div>
+          </div>
+        </div>
+        <a class="chip" href="https://www.youtube.com/watch?v=${encodeURIComponent(video_id)}" target="_blank" rel="noopener noreferrer">
+          פתח ביוטיוב
+        </a>
+      </div>
+    `;
+  } else {
+    meta.innerHTML = `<div class="watchTitle">וידאו: ${escapeHtml(video_id)}</div>`;
+  }
+
+  // Suggested list with infinite scroll (נביא מהערוץ של הסרטון אם יש)
+  const state = { loading: false, done: false, cursor: null, channel_id: v?.channel_id || null };
+
+  function miniItem(x) {
+    const vid = x?.video_id || x?.videoId || "";
+    const title = x?.title || "";
+    const chTitle = x?.channel_title || x?.channelTitle || x?.channel_id || "";
+    const pub = x?.published_at || null;
+    return `
+      <a class="mini" href="/${encodeURIComponent(vid)}" data-nav>
+        <span class="miniThumb"><img loading="lazy" src="${videoThumb(vid)}" alt=""></span>
+        <span class="miniBody">
+          <p class="miniTitle">${escapeHtml(title)}</p>
+          <div class="miniMeta">${escapeHtml(chTitle)}${pub ? ` • ${escapeHtml(fmtDate(pub))}` : ""}</div>
+        </span>
+      </a>
+    `;
+  }
+
+  // first render
+  const first = suggestedFirst.filter(x => (x.video_id || x.videoId) !== video_id).slice(0, 18);
+  if (!first.length) {
+    side.innerHTML = `<div class="empty">אין מוצעים עדיין.</div>`;
+  } else {
+    side.innerHTML = first.map(miniItem).join("");
+  }
+
+  state.cursor = info?.suggested_next_cursor || null;
+
+  async function loadMore() {
+    if (state.loading || state.done) return;
+
+    // אם אין cursor, ננסה להביא עוד מהערוץ דרך /api/channel
+    if (!state.cursor) {
+      state.done = true;
+      btn.style.display = "none";
+      return;
+    }
+
+    state.loading = true;
+    btn.disabled = true;
+    btn.textContent = "טוען...";
+
+    try {
+      // נשתמש ב־/api/video להמשכים (מימוש למטה ב־API)
+      const more = await fetchJSON(
+        `/api/video?video_id=${encodeURIComponent(video_id)}&suggested_limit=18&suggested_cursor=${encodeURIComponent(state.cursor)}`,
+        { signal: currentAbort.signal }
+      );
+
+      const items = (more?.suggested || []).filter(x => (x.video_id || x.videoId) !== video_id);
+      const next = more?.suggested_next_cursor || null;
+
+      const frag = document.createDocumentFragment();
+      const tmp = document.createElement("div");
+      tmp.innerHTML = items.map(miniItem).join("");
+      while (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild);
+      side.appendChild(frag);
+
+      state.cursor = next;
+      if (!next || items.length === 0) state.done = true;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      state.loading = false;
+      btn.disabled = false;
+      btn.textContent = state.done ? "אין עוד" : "טען עוד";
+      if (state.done) btn.style.display = "none";
+    }
+  }
+
+  currentCleanup = makeInfiniteScroll({ sentinel, loadMore, button: btn });
+  // לא חייבים לקרוא כאן – זה יופעל כשגוללים, אבל אפשר:
+  // await loadMore();
 }
 
-/* ---------- ROUTER ---------- */
-async function render(){
-  const { parts, qs } = route();
+/* -------------- Router -------------- */
 
-  if(parts.length === 0) return pageHome();
-  if(parts[0] === "channels") return pageChannels();
-  if(parts[0] === "playlists") return pagePlaylists();
-  if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim());
+async function route() {
+  cleanupPage();
+  currentAbort = new AbortController();
 
-  // /UC.../videos or /UC.../playlists
-  if(parts.length >= 1 && isChannelId(parts[0])){
-    const tab = parts[1] || "videos";
-    return pageChannel(parts[0], tab === "playlists" ? "playlists" : "videos");
+  const url = new URL(location.href);
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+  const q = url.searchParams.get("q") || "";
+  const tab = url.searchParams.get("tab") || "videos";
+
+  try {
+    // fixed routes
+    if (pathname === "/") return await pageHome();
+    if (pathname === "/channels") return await pageChannels();
+    if (pathname === "/playlists") return await pagePlaylists();
+    if (pathname === "/search") return await pageSearch(q);
+
+    // dynamic by id
+    const slug = pathname.startsWith("/") ? pathname.slice(1) : pathname;
+    if (!slug) return await pageHome();
+
+    // channel
+    if (slug.startsWith("UC")) return await pageChannel(slug, tab === "playlists" ? "playlists" : "videos");
+
+    // playlist
+    if (slug.startsWith("PL")) return await pagePlaylist(slug);
+
+    // otherwise treat as video id
+    return await pageWatch(slug);
+  } catch (err) {
+    console.error(err);
+    app.innerHTML = `<div class="empty">שגיאה בטעינה. בדוק קונסול.</div>`;
   }
-
-  // /PL...
-  if(parts.length === 1 && isPlaylistId(parts[0])){
-    return pagePlaylist(parts[0]);
-  }
-
-  // /VIDEOID
-  if(parts.length === 1 && isVideoId(parts[0])){
-    return pageVideo(parts[0]);
-  }
-
-  setPage(`<div class="h1">לא נמצא</div><p class="sub"><a href="/" data-link>חזרה לבית</a></p>`);
 }
 
-/* init */
-hookLinks();
-headerSearch();
-render().catch(showErr);
+route();
