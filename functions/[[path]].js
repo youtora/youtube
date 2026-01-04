@@ -2,27 +2,27 @@ export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // רק דפי HTML
+  // רק HTML (לא לגעת ב-assets / api)
   if (request.method !== "GET") return env.ASSETS.fetch(request);
   const accept = request.headers.get("Accept") || "";
   if (!accept.includes("text/html")) return env.ASSETS.fetch(request);
 
-  const path = url.pathname; // כולל /
+  const path = url.pathname;
 
-  // לא לגעת ב-API וקבצים סטטיים
+  // לא לגעת ב-API ובקבצים סטטיים
   if (path.startsWith("/api/")) return env.ASSETS.fetch(request);
-  if (path.includes(".")) return env.ASSETS.fetch(request); // /assets/*.js, favicon וכו'
+  if (path.includes(".")) return env.ASSETS.fetch(request);
 
-  // תמיד נשרת את ה-SPA (index.html) כדי שרענון לא ייפול ל-404
-  const indexRes = await env.ASSETS.fetch(new Request(new URL("/", url), request));
+  // תמיד נחזיר את ה-SPA (index) כדי שרענון לא ייפול ל-404
+  const indexRes = await env.ASSETS.fetch(new Request(new URL("/", url), request)); // :contentReference[oaicite:1]{index=1}
 
-  // נחלץ מטא רק אם זה סרטון/ערוץ/פלייליסט
-  const meta = await buildOgMeta(url);
+  // בונים OG לפי סוג הדף (וידאו/פלייליסט/ערוץ)
+  const meta = await buildOgMeta({ url, env });
 
-  // אם לא זיהינו - מחזירים index רגיל בלי הזרקות
+  // אם לא זיהינו - תחזיר את ה-SPA רגיל בלי OG דינמי
   if (!meta) return indexRes;
 
-  return new HTMLRewriter()
+  const rewritten = new HTMLRewriter() // :contentReference[oaicite:2]{index=2}
     .on("head", {
       element(el) {
         el.append(
@@ -33,7 +33,6 @@ export async function onRequest(context) {
 <meta property="og:description" content="${esc(meta.description)}">
 <meta property="og:image" content="${esc(meta.image)}">
 <meta property="og:url" content="${esc(meta.url)}">
-
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(meta.title)}">
 <meta name="twitter:description" content="${esc(meta.description)}">
@@ -44,89 +43,113 @@ export async function onRequest(context) {
       },
     })
     .transform(indexRes);
+
+  // אופציונלי: פריוויו מהיר לבוטים (לא חובה)
+  const out = new Response(rewritten.body, rewritten);
+  out.headers.set("Cache-Control", "public, max-age=300");
+  return out;
 }
 
-async function buildOgMeta(url) {
+async function buildOgMeta({ url, env }) {
   const p = url.pathname;
 
-  // 1) סרטון אצלך: /<11chars>
+  // 1) וידאו אצלך: /<11chars>
   const mVideo = p.match(/^\/([A-Za-z0-9_-]{11})$/);
   if (mVideo) {
     const id = mVideo[1];
-    return await fromYouTubeOEmbed({
-      pageUrl: url.toString(),
-      oembedUrl: `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(
-        `https://www.youtube.com/watch?v=${id}`
-      )}`,
-      fallbackImage: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+
+    // אם יש לך טבלת videos – אפשר לשדרג פה, אבל נשאיר עובד גם בלי:
+    return {
       type: "video.other",
-      fallbackDescription: "צפה בסרטון",
-    });
+      url: url.toString(),
+      title: "צפייה בסרטון",
+      description: "צפה בסרטון",
+      image: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    };
   }
 
-  // 2) ערוץ: /channel/<id>  (UC...)
-  const mChannel = p.match(/^\/channel\/([^/]+)$/);
-  if (mChannel) {
-    const ch = mChannel[1];
-    return await fromYouTubeOEmbed({
-      pageUrl: url.toString(),
-      oembedUrl: `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(
-        `https://www.youtube.com/channel/${ch}`
-      )}`,
-      // אין תמונת fallback טובה לערוץ בלי API, אז נשים משהו כללי
-      fallbackImage: `${url.origin}/default-og.jpg`,
+  // 2) פלייליסט אצלך: /PL....
+  const mPl = p.match(/^\/(PL[A-Za-z0-9_-]+)$/);
+  if (mPl) {
+    const playlistId = mPl[1];
+
+    // שליפה מ-D1 לפי מה שהראית בצילום: playlists(playlist_id, title, thumb_video_id)
+    const row = await firstRow(env.DB, `
+      SELECT title, thumb_video_id
+      FROM playlists
+      WHERE playlist_id = ?
+      LIMIT 1
+    `, [playlistId]);
+
+    if (!row) {
+      // fallback מינימלי אם לא נמצא
+      return {
+        type: "website",
+        url: url.toString(),
+        title: "פלייליסט",
+        description: "צפה בפלייליסט",
+        image: `${url.origin}/default-og.jpg`,
+      };
+    }
+
+    const title = row.title || "פלייליסט";
+    const thumbVideoId = row.thumb_video_id || "";
+    const image = thumbVideoId
+      ? `https://i.ytimg.com/vi/${thumbVideoId}/hqdefault.jpg`
+      : `${url.origin}/default-og.jpg`;
+
+    return {
       type: "website",
-      fallbackDescription: "צפה בערוץ",
-    });
+      url: url.toString(),
+      title,
+      description: "צפה בפלייליסט",
+      image,
+    };
   }
 
-  // 3) פלייליסט: /playlist/<id>  או /playlist?list=PL...
-  // אצלך ציינת "דפי פלייליסטים" - תפסתי גם וגם.
-  const mPlaylist1 = p.match(/^\/playlist\/([^/]+)$/);
-  const list = mPlaylist1 ? mPlaylist1[1] : url.searchParams.get("list");
+  // 3) ערוץ אצלך: /UC.../<tab>
+  const mCh = p.match(/^\/(UC[A-Za-z0-9_-]{10,})(?:\/([^/]+))?$/);
+  if (mCh) {
+    const channelId = mCh[1];
 
-  if (list && (p.startsWith("/playlist") || p.startsWith("/playlist/"))) {
-    return await fromYouTubeOEmbed({
-      pageUrl: url.toString(),
-      oembedUrl: `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(
-        `https://www.youtube.com/playlist?list=${list}`
-      )}`,
-      fallbackImage: `${url.origin}/default-og.jpg`,
+    // שליפה מ-D1 לפי מה שהראית: channels(channel_id, title, thumbnail_url)
+    const row = await firstRow(env.DB, `
+      SELECT title, thumbnail_url
+      FROM channels
+      WHERE channel_id = ?
+      LIMIT 1
+    `, [channelId]);
+
+    if (!row) {
+      return {
+        type: "website",
+        url: url.toString(),
+        title: "ערוץ",
+        description: "צפה בערוץ",
+        image: `${url.origin}/default-og.jpg`,
+      };
+    }
+
+    return {
       type: "website",
-      fallbackDescription: "צפה בפלייליסט",
-    });
+      url: url.toString(),
+      title: row.title || "ערוץ",
+      description: "צפה בערוץ",
+      image: row.thumbnail_url || `${url.origin}/default-og.jpg`,
+    };
   }
 
-  // אם יש אצלך נתיבים אחרים לערוצים (למשל /@handle או /c/xyz) תגיד לי ואוסיף 2 שורות התאמה.
   return null;
 }
 
-async function fromYouTubeOEmbed({
-  pageUrl,
-  oembedUrl,
-  fallbackImage,
-  type,
-  fallbackDescription,
-}) {
-  let title = "צפייה";
-  let image = fallbackImage;
-  let description = fallbackDescription;
-
-  try {
-    const r = await fetch(oembedUrl, { headers: { Accept: "application/json" } });
-    if (r.ok) {
-      const j = await r.json();
-      title = j.title || title;
-      image = j.thumbnail_url || image;
-      if (j.author_name) description = `ערוץ: ${j.author_name}`;
-    }
-  } catch {}
-
-  return { url: pageUrl, title, description, image, type };
+async function firstRow(DB, sql, params) {
+  if (!DB) return null; // אם binding שונה אצלך – תעדכן את השם (בד"כ DB)
+  const res = await DB.prepare(sql).bind(...params).all();
+  return res?.results?.[0] || null;
 }
 
 function esc(s) {
-  return String(s)
+  return String(s ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
