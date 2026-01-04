@@ -8,6 +8,24 @@ function fmtDate(unix){
 }
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
 
+/* helper: card render (הדבק פעם אחת) */
+function renderVideoCard(v){
+  const thumb = ytVideoThumb(v.video_id);
+  const d = fmtDate(v.published_at);
+  return `
+    <a class="card" href="/${encodeURIComponent(v.video_id)}" data-link>
+      <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
+      <div class="cardBody">
+        <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+        <div class="cardMeta">
+          <span>${esc(v.channel_title || v.channel_id)}</span>
+          ${d ? `<span>${esc(d)}</span>` : ``}
+        </div>
+      </div>
+    </a>
+  `;
+}
+
 async function api(url){
   const r = await fetch(url);
   const t = await r.text();
@@ -64,34 +82,63 @@ function headerSearch(){
 
 /* --- PAGES --- */
 
+/* בית: טען עוד */
+let homeState = { cursor: null, loading: false, done: false, token: 0 };
+
 async function pageHome(){
-  // דורש endpoint קטן api/latest (קובץ למטה)
-  setPage(`<div class="muted">טוען…</div>`);
-  const data = await api(`/api/latest?limit=40`);
-  const vids = data.videos || [];
+  homeState = { cursor: null, loading: false, done: false, token: homeState.token + 1 };
+  const t = homeState.token;
 
   setPage(`
     <div class="h1">בית</div>
     <p class="sub">הסרטונים האחרונים מכל הערוצים</p>
     <div class="hr"></div>
 
-    ${vids.length ? `
-      <div class="grid">
-        ${vids.map(v=>`
-          <a class="card" href="/${encodeURIComponent(v.video_id)}" data-link>
-            <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(ytVideoThumb(v.video_id))}">
-            <div class="cardBody">
-              <div class="cardTitle">${esc(v.title || v.video_id)}</div>
-              <div class="cardMeta">
-                <span>${esc(v.channel_title || v.channel_id)}</span>
-                ${fmtDate(v.published_at) ? `<span>${esc(fmtDate(v.published_at))}</span>` : ``}
-              </div>
-            </div>
-          </a>
-        `).join("")}
-      </div>
-    ` : `<div class="muted">אין עדיין סרטונים במסד.</div>`}
+    <div id="homeGrid" class="grid"></div>
+
+    <div class="btnRow" style="margin-top:14px">
+      <button id="homeMoreBtn" class="btn" type="button">טען עוד</button>
+    </div>
+
+    <div id="homeHint" class="muted" style="margin-top:8px"></div>
   `);
+
+  const btn = document.getElementById("homeMoreBtn");
+  btn.onclick = () => homeLoadMore(t);
+
+  await homeLoadMore(t);
+}
+
+async function homeLoadMore(token){
+  if (homeState.loading || homeState.done) return;
+  homeState.loading = true;
+
+  const btn = document.getElementById("homeMoreBtn");
+  const hint = document.getElementById("homeHint");
+  const grid = document.getElementById("homeGrid");
+
+  btn.disabled = true;
+  hint.textContent = "טוען…";
+
+  const url = `/api/latest?limit=24${homeState.cursor ? `&cursor=${encodeURIComponent(homeState.cursor)}` : ""}`;
+  const data = await api(url);
+
+  // אם המשתמש יצא מהדף באמצע – לא להמשיך
+  if (token !== homeState.token) return;
+
+  const vids = data.videos || [];
+  if (vids.length) {
+    grid.insertAdjacentHTML("beforeend", vids.map(renderVideoCard).join(""));
+  }
+
+  homeState.cursor = data.next_cursor || null;
+  homeState.done = !homeState.cursor || vids.length === 0;
+
+  btn.disabled = false;
+  btn.style.display = homeState.done ? "none" : "inline-flex";
+  hint.textContent = homeState.done ? "סוף הרשימה." : "";
+
+  homeState.loading = false;
 }
 
 async function pageChannels(){
