@@ -80,7 +80,43 @@ function renderVideoCard(v){
   `;
 }
 
-/* ---------- HOME: Load more ---------- */
+/* ========= Infinite Loader (minimal & safe) ========= */
+let activeObserver = null;
+
+function stopActiveObserver(){
+  if (activeObserver) {
+    try { activeObserver.disconnect(); } catch {}
+    activeObserver = null;
+  }
+}
+
+/**
+ * Creates infinite scroll observer on a sentinel element.
+ * - Calls `onNearEnd()` when sentinel is near viewport.
+ * - Uses rootMargin to preload early.
+ * - Safe: only 1 active observer at a time (SPA).
+ */
+function startInfiniteScroll({ sentinelEl, onNearEnd, enabled = true, rootMargin = "800px 0px" }) {
+  stopActiveObserver();
+
+  if (!enabled) return null;
+  if (!sentinelEl) return null;
+  if (typeof IntersectionObserver === "undefined") return null;
+
+  const obs = new IntersectionObserver((entries)=>{
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        onNearEnd();
+      }
+    }
+  }, { root: null, rootMargin, threshold: 0 });
+
+  obs.observe(sentinelEl);
+  activeObserver = obs;
+  return obs;
+}
+
+/* ---------- HOME: infinite load ---------- */
 let homeState = { cursor: null, loading: false, done: false, token: 0 };
 
 async function pageHome(){
@@ -94,17 +130,40 @@ async function pageHome(){
 
     <div id="homeGrid" class="grid"></div>
 
+    <!-- sentinel קטן לטעינה עצלה -->
+    <div id="homeSentinel" style="height:1px"></div>
+
+    <!-- fallback button (בדרך כלל מוסתר) -->
     <div class="btnRow" style="margin-top:14px">
-      <button id="homeMoreBtn" class="btn" type="button">טען עוד</button>
+      <button id="homeMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
     </div>
 
     <div id="homeHint" class="muted" style="margin-top:8px"></div>
   `);
 
   const btn = document.getElementById("homeMoreBtn");
+  const hint = document.getElementById("homeHint");
+  const sentinel = document.getElementById("homeSentinel");
+
   btn.onclick = () => homeLoadMore(t);
 
+  // אם אין IntersectionObserver, נציג כפתור
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO) btn.style.display = "inline-flex";
+
+  // טען מנה ראשונה
   await homeLoadMore(t);
+
+  // הפעל infinite scroll (רק אם יש IO)
+  if (hasIO) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => homeLoadMore(t),
+      enabled: true,
+      rootMargin: "900px 0px",
+    });
+    hint.textContent = homeState.done ? "סוף הרשימה." : "";
+  }
 }
 
 async function homeLoadMore(token){
@@ -115,12 +174,13 @@ async function homeLoadMore(token){
   const hint = document.getElementById("homeHint");
   const grid = document.getElementById("homeGrid");
 
-  btn.disabled = true;
-  hint.textContent = "טוען…";
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
 
   const url = `/api/latest?limit=24${homeState.cursor ? `&cursor=${encodeURIComponent(homeState.cursor)}` : ""}`;
   const data = await api(url);
 
+  // אם יצאנו מהדף באמצע
   if (token !== homeState.token) return;
 
   const vids = data.videos || [];
@@ -131,15 +191,23 @@ async function homeLoadMore(token){
   homeState.cursor = data.next_cursor || null;
   homeState.done = !homeState.cursor || vids.length === 0;
 
-  btn.disabled = false;
-  btn.style.display = homeState.done ? "none" : "inline-flex";
-  hint.textContent = homeState.done ? "סוף הרשימה." : "";
+  if (btn) {
+    btn.disabled = false;
+    // כפתור נשאר רק fallback
+    btn.style.display = (typeof IntersectionObserver === "undefined" && !homeState.done) ? "inline-flex" : "none";
+  }
+
+  if (hint) hint.textContent = homeState.done ? "סוף הרשימה." : "";
+
+  if (homeState.done) stopActiveObserver();
 
   homeState.loading = false;
 }
 
 /* ---------- PAGES: channels list ---------- */
 async function pageChannels(){
+  stopActiveObserver();
+
   setPage(`<div class="muted">טוען ערוצים…</div>`);
   const data = await api(`/api/channels`);
   const channels = data.channels || [];
@@ -170,6 +238,8 @@ async function pageChannels(){
 
 /* ---------- PAGES: playlists list ---------- */
 async function pagePlaylists(){
+  stopActiveObserver();
+
   setPage(`<div class="muted">טוען פלייליסטים…</div>`);
   const data = await api(`/api/playlists?limit=60`);
   const playlists = data.playlists || [];
@@ -202,6 +272,8 @@ async function pagePlaylists(){
 
 /* ---------- SEARCH ---------- */
 async function pageSearch(q){
+  stopActiveObserver();
+
   if(!q){
     setPage(`<div class="h1">חיפוש</div><p class="sub">הקלד מילה בחיפוש למעלה.</p>`);
     return;
@@ -226,15 +298,16 @@ async function pageSearch(q){
   `);
 }
 
-/* ---------- CHANNEL: Load more videos ---------- */
+/* ---------- CHANNEL: infinite load videos ---------- */
 let channelVideosState = { key: "", cursor: null, loading: false, done: false, token: 0 };
 
 async function pageChannel(channel_id, tab){
+  stopActiveObserver();
+
   const activeTab = (tab === "playlists") ? "playlists" : "videos";
 
   setPage(`<div class="muted">טוען ערוץ…</div>`);
 
-  // עבור טאב סרטונים — לא צריך להביא פלייליסטים (חוסך שאילתות)
   const include_playlists = activeTab === "playlists" ? "1" : "0";
   const data = await api(`/api/channel?channel_id=${encodeURIComponent(channel_id)}&include_playlists=${include_playlists}&videos_limit=24`);
 
@@ -286,7 +359,7 @@ async function pageChannel(channel_id, tab){
     return;
   }
 
-  // VIDEOS tab with Load More
+  // VIDEOS tab
   channelVideosState = {
     key: channel_id,
     cursor: data.videos_next_cursor || null,
@@ -304,15 +377,33 @@ async function pageChannel(channel_id, tab){
       ${(data.videos || []).map(v => renderVideoCard({ ...v, channel_id: ch.channel_id, channel_title: ch.title })).join("")}
     </div>
 
+    <div id="chSentinel" style="height:1px"></div>
+
     <div class="btnRow" style="margin-top:14px">
-      <button id="chMoreBtn" class="btn" type="button" ${channelVideosState.done ? 'style="display:none"' : ""}>טען עוד</button>
+      <button id="chMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
     </div>
 
     <div id="chHint" class="muted" style="margin-top:8px"></div>
   `);
 
   const btn = document.getElementById("chMoreBtn");
+  const hint = document.getElementById("chHint");
+  const sentinel = document.getElementById("chSentinel");
+
   btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title);
+
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO && !channelVideosState.done) btn.style.display = "inline-flex";
+  if (hint) hint.textContent = channelVideosState.done ? "סוף הרשימה." : "";
+
+  if (hasIO && !channelVideosState.done) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title),
+      enabled: true,
+      rootMargin: "900px 0px",
+    });
+  }
 }
 
 async function channelLoadMoreVideos(token, channel_id, channel_title){
@@ -325,8 +416,8 @@ async function channelLoadMoreVideos(token, channel_id, channel_title){
   const hint = document.getElementById("chHint");
   const grid = document.getElementById("chGrid");
 
-  btn.disabled = true;
-  hint.textContent = "טוען…";
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
 
   const url =
     `/api/channel?channel_id=${encodeURIComponent(channel_id)}` +
@@ -347,15 +438,21 @@ async function channelLoadMoreVideos(token, channel_id, channel_title){
   channelVideosState.cursor = data.videos_next_cursor || null;
   channelVideosState.done = !channelVideosState.cursor || vids.length === 0;
 
-  btn.disabled = false;
-  btn.style.display = channelVideosState.done ? "none" : "inline-flex";
-  hint.textContent = channelVideosState.done ? "סוף הרשימה." : "";
+  if (btn) {
+    btn.disabled = false;
+    btn.style.display = (typeof IntersectionObserver === "undefined" && !channelVideosState.done) ? "inline-flex" : "none";
+  }
+  if (hint) hint.textContent = channelVideosState.done ? "סוף הרשימה." : "";
+
+  if (channelVideosState.done) stopActiveObserver();
 
   channelVideosState.loading = false;
 }
 
 /* ---------- VIDEO PAGE ---------- */
 async function pageVideo(video_id){
+  stopActiveObserver();
+
   setPage(`<div class="muted">טוען סרטון…</div>`);
   const data = await api(`/api/video?video_id=${encodeURIComponent(video_id)}`);
   const v = data.video;
@@ -416,6 +513,8 @@ function isPlaylistId(s){ return /^PL[a-zA-Z0-9_-]{10,}$/.test(s); }
 function isVideoId(s){ return /^[a-zA-Z0-9_-]{11}$/.test(s); }
 
 async function pagePlaylist(playlist_id){
+  stopActiveObserver();
+
   setPage(`<div class="muted">טוען פלייליסט…</div>`);
   const data = await api(`/api/playlist?playlist_id=${encodeURIComponent(playlist_id)}`);
   const p = data.playlist;
