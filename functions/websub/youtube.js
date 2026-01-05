@@ -90,13 +90,15 @@ export async function onRequest({ env, request }){
 
     const topic = request.headers.get("x-hub-topic") || "";
 
-    // בדיקת חתימה (אם מוגדר סוד)
-    if(env.WEBSUB_SECRET){
-      const sig = request.headers.get("x-hub-signature") || "";
-      const expected = "sha1=" + (await hmacSha1Hex(env.WEBSUB_SECRET, bodyU8));
-      if (sig !== expected) {
-        return new Response("bad signature", { status: 403 });
-      }
+    // בדיקת חתימה (חובה)
+    if(!env.WEBSUB_SECRET){
+      return new Response("missing WEBSUB_SECRET", { status: 500 });
+    }
+
+    const sig = request.headers.get("x-hub-signature") || "";
+    const expected = "sha1=" + (await hmacSha1Hex(env.WEBSUB_SECRET, bodyU8));
+    if (sig !== expected) {
+      return new Response("bad signature", { status: 403 });
     }
 
     const xml = new TextDecoder().decode(bodyU8);
