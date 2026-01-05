@@ -59,13 +59,36 @@ export async function onRequest({ env, request }){
     const challenge = url.searchParams.get("hub.challenge") || "";
     const lease = parseInt(url.searchParams.get("hub.lease_seconds") || "0", 10) || 0;
 
+    // מגן מזיופים: חייב verify_token תואם (זה מגיע כפרמטר בקשת ה-GET מה-Hub)
+    if (!env.WEBSUB_VERIFY_TOKEN) {
+      return new Response("missing WEBSUB_VERIFY_TOKEN", { status: 500 });
+    }
+    const verifyToken = url.searchParams.get("hub.verify_token") || "";
+    if (verifyToken !== env.WEBSUB_VERIFY_TOKEN) {
+      return new Response("bad verify_token", { status: 403 });
+    }
+
     if (!challenge) {
       return new Response("missing hub.challenge", { status: 400 });
     }
 
-    // אם יש לך: topic, channel_id, lease_seconds
+    // מומלץ: לא לאשר אימות אם לא ביקשנו subscribe לאחרונה
+    // (מונע מצב שמישהו שולח לינק אימות ישן ומעדכן לך סטטוס)
+    const row = topic ? await env.DB.prepare(`
+      SELECT last_subscribed_at
+      FROM subscriptions
+      WHERE topic_url=?
+    `).bind(topic).first() : null;
+
+    const t = nowSec();
+    const MAX_AGE = 15 * 60; // 15 דקות
+    if (!row?.last_subscribed_at || row.last_subscribed_at < (t - MAX_AGE)) {
+      return new Response("stale verification", { status: 403 });
+    }
+
+    // אם יש לך: topic, lease_seconds
     if (topic && lease > 0) {
-      const expires = nowSec() + lease;
+      const expires = t + lease;
 
       await env.DB.prepare(`
         UPDATE subscriptions
@@ -74,7 +97,7 @@ export async function onRequest({ env, request }){
             last_subscribed_at=?,
             last_error=NULL
         WHERE topic_url=?
-      `).bind(expires, nowSec(), topic).run();
+      `).bind(expires, t, topic).run();
     }
 
     return new Response(challenge, {
