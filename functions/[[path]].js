@@ -4,9 +4,9 @@ export async function onRequest(context) {
   const path = url.pathname;
 
   // רק GET
-    // עמוד ניהול: תן ל-/admin לעבוד כמו /admin.html
-  if (path === "/admin" || path === "/admin/") {
-    return env.ASSETS.fetch(new Request(new URL("/admin.html", url), request));
+  // עמוד ניהול: אל תעביר ל-.html (Pages עושה Clean URLs), רק תן ל-ASSETS לטפל בזה
+  if (path === "/admin" || path === "/admin/" || path === "/admin.html") {
+    return env.ASSETS.fetch(request);
   }
 
   if (request.method !== "GET") return env.ASSETS.fetch(request);
