@@ -4,6 +4,11 @@ export async function onRequest(context) {
   const path = url.pathname;
 
   // רק GET
+    // עמוד ניהול: תן ל-/admin לעבוד כמו /admin.html
+  if (path === "/admin" || path === "/admin/") {
+    return env.ASSETS.fetch(new Request(new URL("/admin.html", url), request));
+  }
+
   if (request.method !== "GET") return env.ASSETS.fetch(request);
 
   // אל תיגע ב-API ובקבצים סטטיים
