@@ -3,16 +3,32 @@ export async function onRequest({ env, request }) {
 
   const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "24", 10), 1), 60);
 
-  // cursor: נשתמש רק ב-id כדי לאפשר דפדוף באינדקס (INTEGER PRIMARY KEY / rowid)
-  // נתמוך גם בפורמט הישן "<published_or_0>:<row_id>" כדי לא לשבור דברים קיימים.
+  // cursor format: "<published_at>:<id>"
+  // (נשאר אותו פורמט כדי שהלקוח לא יסתבך)
   const cursorRaw = (url.searchParams.get("cursor") || "").trim();
+  let cursorP = null;
   let cursorId = null;
 
   if (cursorRaw) {
     const parts = cursorRaw.split(":");
-    const idStr = (parts.length === 2 ? parts[1] : parts[0]) || "0";
-    const id = parseInt(idStr, 10);
-    if (Number.isFinite(id) && id > 0) cursorId = id;
+    if (parts.length === 2) {
+      const p = parseInt(parts[0] || "0", 10);
+      const id = parseInt(parts[1] || "0", 10);
+      if (Number.isFinite(p) && Number.isFinite(id) && id > 0) {
+        cursorP = p;
+        cursorId = id;
+      }
+    } else {
+      // תאימות אם נשאר לך cursor ישן שהוא רק id
+      const id = parseInt(parts[0] || "0", 10);
+      if (Number.isFinite(id) && id > 0) cursorId = id;
+    }
+  }
+
+  // אם הגיע cursor שהוא רק id (מתקופה קודמת), נשלים published_at פעם אחת
+  if (cursorP === null && cursorId !== null) {
+    const row = await env.DB.prepare(`SELECT published_at FROM videos WHERE id=?`).bind(cursorId).first();
+    cursorP = row?.published_at ?? 0;
   }
 
   const baseSql = `
@@ -24,19 +40,19 @@ export async function onRequest({ env, request }) {
       c.channel_id,
       c.title AS channel_title
     FROM videos v
-    JOIN channels c ON c.id = v.channel_int
+    LEFT JOIN channels c ON c.id = v.channel_int
   `;
 
-  const rows = cursorId
+  const rows = (cursorP !== null && cursorId !== null)
     ? await env.DB.prepare(`
         ${baseSql}
-        WHERE v.id < ?
-        ORDER BY v.id DESC
+        WHERE (v.published_at < ? OR (v.published_at = ? AND v.id < ?))
+        ORDER BY v.published_at DESC, v.id DESC
         LIMIT ?
-      `).bind(cursorId, limit).all()
+      `).bind(cursorP, cursorP, cursorId, limit).all()
     : await env.DB.prepare(`
         ${baseSql}
-        ORDER BY v.id DESC
+        ORDER BY v.published_at DESC, v.id DESC
         LIMIT ?
       `).bind(limit).all();
 
@@ -51,8 +67,8 @@ export async function onRequest({ env, request }) {
   let next_cursor = null;
   const last = (rows.results || [])[rows.results.length - 1];
   if (last) {
-    // cursor חדש הוא רק ה-id (הלקוח מתייחס לזה כמחרוזת אטומה)
-    next_cursor = String(last.id);
+    const p = (last.published_at ?? 0);
+    next_cursor = `${p}:${last.id}`;
   }
 
   return Response.json(
