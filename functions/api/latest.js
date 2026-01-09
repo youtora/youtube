@@ -1,7 +1,7 @@
 export async function onRequest({ env, request }) {
   const url = new URL(request.url);
 
-  // ניסוי: תמיד נחזיר 200 בכל בקשה (גם אם הלקוח שולח limit=24)
+  // ניסוי: נשאיר 200 כדי לצמצם מספר שאילתות
   const limit = 200;
 
   // cursor format: "<published_at>:<id>"
@@ -21,19 +21,18 @@ export async function onRequest({ env, request }) {
     }
   }
 
-  // רק videos, בלי channels בכלל (כדי למדוד Reads “נקי”)
   const rows =
     (cursorP !== null && cursorId !== null)
       ? await env.DB.prepare(`
           SELECT id, video_id, title, published_at
-          FROM videos
-          WHERE (published_at < ? OR (published_at = ? AND id < ?))
+          FROM videos INDEXED BY idx_videos_latest_cover
+          WHERE (published_at, id) < (?, ?)
           ORDER BY published_at DESC, id DESC
           LIMIT ?
-        `).bind(cursorP, cursorP, cursorId, limit).all()
+        `).bind(cursorP, cursorId, limit).all()
       : await env.DB.prepare(`
           SELECT id, video_id, title, published_at
-          FROM videos
+          FROM videos INDEXED BY idx_videos_latest_cover
           ORDER BY published_at DESC, id DESC
           LIMIT ?
         `).bind(limit).all();
@@ -44,8 +43,6 @@ export async function onRequest({ env, request }) {
     video_id: r.video_id,
     title: r.title,
     published_at: r.published_at,
-
-    // ניסוי: בלי ערוצים
     channel_id: null,
     channel_title: null,
   }));
