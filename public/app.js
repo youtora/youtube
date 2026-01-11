@@ -297,7 +297,7 @@ async function pageSearch(q){
     <div id="searchSentinel" style="height:1px"></div>
 
     <div class="btnRow" style="margin-top:14px">
-      <button id="searchMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
+      <button id="searchMoreBtn" class="btn" type="button">טען עוד</button>
     </div>
 
     <div id="searchHint" class="muted" style="margin-top:8px"></div>
@@ -360,7 +360,7 @@ async function searchLoadMore(token, q){
 
   if (btn) {
     btn.disabled = false;
-    btn.style.display = (typeof IntersectionObserver === "undefined" && !searchState.done) ? "inline-flex" : "none";
+    btn.style.display = !searchState.done ? "inline-flex" : "none";
   }
 
   if (hint) hint.textContent = searchState.done ? "סוף הרשימה." : "";
@@ -474,7 +474,7 @@ async function pageChannel(channel_id, tab){
       sentinelEl: sentinel,
       onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title),
       enabled: true,
-      rootMargin: "900px 0px",
+      rootMargin: "200px 0px",
     });
   }
 }
