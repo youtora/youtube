@@ -51,7 +51,7 @@ function extractEntries(xml) {
       videoId,
       channelId,
       title,
-      published_at: toUnixSeconds(published || null)
+      published_at: toUnixSeconds(published || null) ?? 0
     });
   }
 
@@ -257,13 +257,13 @@ export async function onRequest({ env, request }) {
         ON CONFLICT(video_id) DO UPDATE SET
           channel_int   = excluded.channel_int,
           title         = excluded.title,
-          published_at  = COALESCE(excluded.published_at, videos.published_at),
+          published_at  = CASE WHEN excluded.published_at > 0 THEN excluded.published_at ELSE videos.published_at END,
           updated_at    = excluded.updated_at
         WHERE
           videos.channel_int IS NOT excluded.channel_int
           OR videos.title IS NOT excluded.title
-          OR (excluded.published_at IS NOT NULL AND COALESCE(videos.published_at,0) != COALESCE(excluded.published_at,0))
-      `).bind(e.videoId, channelInt, title, e.published_at ?? null, now));
+          OR (excluded.published_at > 0 AND videos.published_at != excluded.published_at)
+      `).bind(e.videoId, channelInt, title, e.published_at ?? 0, now));
     }
 
     if (stmts.length) await env.DB.batch(stmts);
