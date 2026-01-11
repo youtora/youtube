@@ -1,29 +1,60 @@
+function clamp(n, a, b) {
+  return Math.max(a, Math.min(b, n));
+}
+
 export async function onRequest({ env, request }) {
   const url = new URL(request.url);
   const video_id = (url.searchParams.get("video_id") || "").trim();
   if (!video_id) return new Response("missing video_id", { status: 400 });
 
-  const video = await env.DB.prepare(`
-    SELECT v.video_id, v.title, v.published_at,
-           c.channel_id, c.title AS channel_title, c.thumbnail_url
-    FROM videos v
-    JOIN channels c ON c.id = v.channel_int
-    WHERE v.video_id = ?
+  const recLimit = clamp(parseInt(url.searchParams.get("recommended_limit") || "20", 10), 1, 60);
+
+  // 1) מביאים את הסרטון פעם אחת (כולל channel_int)
+  const vrow = await env.DB.prepare(`
+    SELECT id, video_id, title, published_at, channel_int
+    FROM videos
+    WHERE video_id = ?
+    LIMIT 1
   `).bind(video_id).first();
 
-  if (!video) return new Response("not found", { status: 404 });
+  if (!vrow) return new Response("not found", { status: 404 });
 
-  const recommended = await env.DB.prepare(`
-    SELECT v2.video_id, v2.title, v2.published_at
-    FROM videos v2
-    WHERE v2.channel_int = (SELECT channel_int FROM videos WHERE video_id = ?)
-      AND v2.video_id <> ?
-    ORDER BY (v2.published_at IS NULL), v2.published_at DESC, v2.id DESC
-    LIMIT 20
-  `).bind(video_id, video_id).all();
+  // 2) מביאים פרטי ערוץ פעם אחת (שורה אחת)
+  const crow = await env.DB.prepare(`
+    SELECT channel_id, title AS channel_title, thumbnail_url
+    FROM channels
+    WHERE id = ?
+    LIMIT 1
+  `).bind(vrow.channel_int).first();
 
-  return Response.json({
-    video,
-    recommended: recommended.results
-  });
+  const video = {
+    video_id: vrow.video_id,
+    title: vrow.title,
+    published_at: vrow.published_at,
+    channel_id: crow?.channel_id || null,
+    channel_title: crow?.channel_title || null,
+    thumbnail_url: crow?.thumbnail_url || null,
+  };
+
+  // 3) “מוצעים” מאותו ערוץ — דפדוף על האינדקס של הערוץ (בלי subquery, בלי NULL-order)
+  const rec = await env.DB.prepare(`
+    SELECT video_id, title, published_at
+    FROM videos INDEXED BY idx_videos_channel_cover
+    WHERE channel_int = ?
+      AND video_id <> ?
+    ORDER BY published_at DESC, id DESC
+    LIMIT ?
+  `).bind(vrow.channel_int, video_id, recLimit).all();
+
+  return Response.json(
+    {
+      video,
+      recommended: rec.results || []
+    },
+    {
+      headers: {
+        "cache-control": "public, max-age=300"
+      }
+    }
+  );
 }
