@@ -1,5 +1,6 @@
 // functions/api/search.js
-// FTS5 search on titles only (video_fts) + cursor pagination by rowid
+// FTS5 search (titles only) + cursor pagination by rowid
+// Optimized: fetch only rowids from FTS, then fetch video fields from videos by PK
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -28,21 +29,23 @@ export async function onRequest({ env, request }) {
   const cleaned = cleanQuery(qRaw);
   const match = toFtsMatch(cleaned);
 
-  const limit = clamp(parseInt(url.searchParams.get("limit") || "24", 10), 1, 50);
+  // תן ל-UI לבקש 100/200 בלי להיחנק
+  const limit = clamp(parseInt(url.searchParams.get("limit") || "100", 10), 1, 200);
 
   const cursorRaw = (url.searchParams.get("cursor") || "").trim();
   const cursor = cursorRaw ? parseInt(cursorRaw, 10) : null;
 
   if (!match) {
     return Response.json(
-      { q: qRaw, match: "", results: [], next_cursor: null },
+      { results: [], next_cursor: null },
       { headers: { "cache-control": "no-store" } }
     );
   }
 
-  const rows = (Number.isFinite(cursor) && cursor > 0)
+  // 1) FTS: רק rowid (זול יותר)
+  const fts = (Number.isFinite(cursor) && cursor > 0)
     ? await env.DB.prepare(`
-        SELECT rowid, video_id, title, published_at
+        SELECT rowid
         FROM video_fts
         WHERE video_fts MATCH ?
           AND rowid < ?
@@ -50,28 +53,42 @@ export async function onRequest({ env, request }) {
         LIMIT ?
       `).bind(match, cursor, limit).all()
     : await env.DB.prepare(`
-        SELECT rowid, video_id, title, published_at
+        SELECT rowid
         FROM video_fts
         WHERE video_fts MATCH ?
         ORDER BY rowid DESC
         LIMIT ?
       `).bind(match, limit).all();
 
-  const res = rows.results || [];
+  const ids = (fts.results || []).map(r => r.rowid);
+  if (!ids.length) {
+    return Response.json(
+      { results: [], next_cursor: null },
+      { headers: { "cache-control": "no-store" } }
+    );
+  }
 
-  // מחזירים גם cursor לכל פריט כדי שהלקוח יוכל להמשיך גם אם next_cursor חסר
-  const results = res.map(r => ({
-    video_id: r.video_id,
-    title: r.title,
-    published_at: r.published_at,
-    cursor: String(r.rowid)
+  // 2) videos: שליפה זולה לפי PK (id)
+  const placeholders = ids.map(() => "?").join(",");
+  const vids = await env.DB.prepare(`
+    SELECT id, video_id, title, published_at
+    FROM videos
+    WHERE id IN (${placeholders})
+    ORDER BY id DESC
+  `).bind(...ids).all();
+
+  const results = (vids.results || []).map(v => ({
+    video_id: v.video_id,
+    title: v.title,
+    published_at: v.published_at,
+    // אופציונלי (עוזר ללקוח fallback, לא עולה Reads)
+    cursor: String(v.id)
   }));
 
-  const last = res[res.length - 1];
-  const next_cursor = last ? String(last.rowid) : null;
+  const next_cursor = String(ids[ids.length - 1]);
 
   return Response.json(
-    { q: qRaw, match, results, next_cursor },
+    { results, next_cursor },
     { headers: { "cache-control": "no-store" } }
   );
 }
