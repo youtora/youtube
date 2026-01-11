@@ -348,15 +348,27 @@ async function searchLoadMore(token, q){
 
   const data = await api(url);
 
-  if (token !== searchState.token) return;
+  if (token !== searchState.token) {
+    searchState.loading = false;
+    return;
+  }
 
-  const results = data.results || [];
+  // תמיכה בכמה שמות שדות (כי ה-API שלך כנראה לא מחזיר בדיוק next_cursor/results)
+  const results = data.results || data.videos || data.items || [];
   if (results.length) {
     grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
   }
 
-  searchState.cursor = data.next_cursor || null;
+  const next =
+    data.next_cursor ||
+    data.videos_next_cursor ||
+    data.nextCursor ||
+    data.cursor ||
+    null;
+
+  searchState.cursor = next ? String(next) : null;
   searchState.done = !searchState.cursor || results.length === 0;
+
 
   if (btn) {
     btn.disabled = false;
@@ -364,6 +376,7 @@ async function searchLoadMore(token, q){
   }
 
   if (hint) hint.textContent = searchState.done ? "סוף הרשימה." : "";
+  if (btn) btn.style.display = !searchState.done ? "inline-flex" : "none";
 
   if (searchState.done) stopActiveObserver();
 
