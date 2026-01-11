@@ -270,7 +270,9 @@ async function pagePlaylists(){
   `);
 }
 
-/* ---------- SEARCH ---------- */
+/* ---------- SEARCH (with cursor pagination) ---------- */
+let searchState = { key: "", cursor: null, loading: false, done: false, token: 0 };
+
 async function pageSearch(q){
   stopActiveObserver();
 
@@ -278,25 +280,96 @@ async function pageSearch(q){
     setPage(`<div class="h1">חיפוש</div><p class="sub">הקלד מילה בחיפוש למעלה.</p>`);
     return;
   }
+
   const si = $("searchInput");
   if (si) si.value = q;
 
-  setPage(`<div class="muted">מחפש…</div>`);
-  const data = await api(`/api/search?q=${encodeURIComponent(q)}`);
-  const results = data.results || [];
+  searchState = { key: q, cursor: null, loading: false, done: false, token: searchState.token + 1 };
+  const t = searchState.token;
 
   setPage(`
     <div class="h1">תוצאות חיפוש</div>
     <p class="sub">מילת חיפוש: <b>${esc(q)}</b></p>
     <div class="hr"></div>
 
-    ${results.length ? `
-      <div class="grid">
-        ${results.map(r=>renderVideoCard(r)).join("")}
-      </div>
-    ` : `<div class="muted">אין תוצאות.</div>`}
+    <div id="searchGrid" class="grid"></div>
+
+    <div id="searchSentinel" style="height:1px"></div>
+
+    <div class="btnRow" style="margin-top:14px">
+      <button id="searchMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
+    </div>
+
+    <div id="searchHint" class="muted" style="margin-top:8px"></div>
   `);
+
+  const grid = document.getElementById("searchGrid");
+  const btn = document.getElementById("searchMoreBtn");
+  const hint = document.getElementById("searchHint");
+  const sentinel = document.getElementById("searchSentinel");
+
+  btn.onclick = () => searchLoadMore(t, q);
+
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO) btn.style.display = "inline-flex";
+
+  // טעינה ראשונה
+  await searchLoadMore(t, q);
+
+  // אינסוף־סקрол
+  if (hasIO && !searchState.done) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => searchLoadMore(t, q),
+      enabled: true,
+      rootMargin: "900px 0px",
+    });
+  }
+
+  if (hint) hint.textContent = searchState.done ? "סוף הרשימה." : "";
 }
+
+async function searchLoadMore(token, q){
+  if (searchState.loading || searchState.done) return;
+  if (searchState.key !== q) return;
+
+  searchState.loading = true;
+
+  const btn = document.getElementById("searchMoreBtn");
+  const hint = document.getElementById("searchHint");
+  const grid = document.getElementById("searchGrid");
+
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
+
+  const url =
+    `/api/search?q=${encodeURIComponent(q)}&limit=24` +
+    (searchState.cursor ? `&cursor=${encodeURIComponent(searchState.cursor)}` : "");
+
+  const data = await api(url);
+
+  if (token !== searchState.token) return;
+
+  const results = data.results || [];
+  if (results.length) {
+    grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
+  }
+
+  searchState.cursor = data.next_cursor || null;
+  searchState.done = !searchState.cursor || results.length === 0;
+
+  if (btn) {
+    btn.disabled = false;
+    btn.style.display = (typeof IntersectionObserver === "undefined" && !searchState.done) ? "inline-flex" : "none";
+  }
+
+  if (hint) hint.textContent = searchState.done ? "סוף הרשימה." : "";
+
+  if (searchState.done) stopActiveObserver();
+
+  searchState.loading = false;
+}
+
 
 /* ---------- CHANNEL: infinite load videos ---------- */
 let channelVideosState = { key: "", cursor: null, loading: false, done: false, token: 0 };
