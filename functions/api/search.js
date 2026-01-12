@@ -1,10 +1,6 @@
 // functions/api/search.js
-// FTS5 search (titles only) + cursor pagination by rowid
-// Optimized: fetch only rowids from FTS, then fetch video fields from videos by PK
-
-function clamp(n, a, b) {
-  return Math.max(a, Math.min(b, n));
-}
+// FTS5 search on titles only (video_fts) + cursor pagination by rowid
+// Always returns 50 results per request (no max limit param).
 
 function cleanQuery(q) {
   const s = (q || "").trim();
@@ -29,20 +25,21 @@ export async function onRequest({ env, request }) {
   const cleaned = cleanQuery(qRaw);
   const match = toFtsMatch(cleaned);
 
-  // תן ל-UI לבקש 100/200 בלי להיחנק
-  const limit = clamp(parseInt(url.searchParams.get("limit") || "100", 10), 1, 200);
+  // תמיד 50
+  const limit = 50;
 
+  // cursor: rowid (מספר)
   const cursorRaw = (url.searchParams.get("cursor") || "").trim();
   const cursor = cursorRaw ? parseInt(cursorRaw, 10) : null;
 
   if (!match) {
     return Response.json(
       { results: [], next_cursor: null },
-      { headers: { "cache-control": "no-store" } }
+      { headers: { "cache-control": "public, max-age=30" } }
     );
   }
 
-  // 1) FTS: רק rowid (זול יותר)
+  // 1) מה-FTS מביאים רק rowid (חסכוני)
   const fts = (Number.isFinite(cursor) && cursor > 0)
     ? await env.DB.prepare(`
         SELECT rowid
@@ -64,11 +61,11 @@ export async function onRequest({ env, request }) {
   if (!ids.length) {
     return Response.json(
       { results: [], next_cursor: null },
-      { headers: { "cache-control": "no-store" } }
+      { headers: { "cache-control": "public, max-age=30" } }
     );
   }
 
-  // 2) videos: שליפה זולה לפי PK (id)
+  // 2) מביאים פרטי וידאו לפי PK (id) — זול
   const placeholders = ids.map(() => "?").join(",");
   const vids = await env.DB.prepare(`
     SELECT id, video_id, title, published_at
@@ -81,14 +78,14 @@ export async function onRequest({ env, request }) {
     video_id: v.video_id,
     title: v.title,
     published_at: v.published_at,
-    // אופציונלי (עוזר ללקוח fallback, לא עולה Reads)
-    cursor: String(v.id)
+    cursor: String(v.id) // fallback ללקוח (לא חובה, אבל עוזר)
   }));
 
+  // cursor הבא = ה-rowid האחרון שחזר מה-FTS
   const next_cursor = String(ids[ids.length - 1]);
 
   return Response.json(
     { results, next_cursor },
-    { headers: { "cache-control": "no-store" } }
+    { headers: { "cache-control": "public, max-age=30" } }
   );
 }
