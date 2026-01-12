@@ -343,8 +343,9 @@ async function searchLoadMore(token, q){
   if (hint) hint.textContent = "טוען…";
 
   const url =
-    `/api/search?q=${encodeURIComponent(q)}&limit=24` +
+    `/api/search?q=${encodeURIComponent(q)}&limit=50` +
     (searchState.cursor ? `&cursor=${encodeURIComponent(searchState.cursor)}` : "");
+
 
   let data;
   try {
