@@ -237,38 +237,108 @@ async function pageChannels(){
 }
 
 /* ---------- PAGES: playlists list ---------- */
+let playlistsState = { cursor: null, loading: false, done: false, token: 0 };
+
+function renderPlaylistCard(p){
+  return `
+    <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
+      <img class="thumb16x9" loading="lazy" decoding="async"
+           src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
+           onerror="this.style.display='none'">
+      <div class="cardBody">
+        <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
+        <div class="cardMeta">
+          <span>${esc(p.channel_title || p.channel_id)}</span>
+          ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
+        </div>
+      </div>
+    </a>
+  `;
+}
+
 async function pagePlaylists(){
   stopActiveObserver();
 
-  setPage(`<div class="muted">טוען פלייליסטים…</div>`);
-  const data = await api(`/api/playlists?limit=60`);
-  const playlists = data.playlists || [];
+  playlistsState = { cursor: null, loading: false, done: false, token: playlistsState.token + 1 };
+  const t = playlistsState.token;
 
   setPage(`
     <div class="h1">פלייליסטים</div>
     <p class="sub">רשימת פלייליסטים מכל הערוצים</p>
     <div class="hr"></div>
 
-    ${playlists.length ? `
-      <div class="grid">
-        ${playlists.map(p=>`
-          <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-            <img class="thumb16x9" loading="lazy" decoding="async"
-                 src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-                 onerror="this.style.display='none'">
-            <div class="cardBody">
-              <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
-              <div class="cardMeta">
-                <span>${esc(p.channel_title || p.channel_id)}</span>
-                ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
-              </div>
-            </div>
-          </a>
-        `).join("")}
-      </div>
-    ` : `<div class="muted">אין פלייליסטים עדיין.</div>`}
+    <div id="plGrid" class="grid"></div>
+
+    <div id="plSentinel" style="height:1px"></div>
+
+    <div class="btnRow" style="margin-top:14px">
+      <button id="plMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
+    </div>
+
+    <div id="plHint" class="muted" style="margin-top:8px"></div>
   `);
+
+  const btn = document.getElementById("plMoreBtn");
+  const hint = document.getElementById("plHint");
+  const sentinel = document.getElementById("plSentinel");
+
+  btn.onclick = () => playlistsLoadMore(t);
+
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO) btn.style.display = "inline-flex";
+
+  await playlistsLoadMore(t);
+
+  if (hasIO) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => playlistsLoadMore(t),
+      enabled: true,
+      rootMargin: "900px 0px",
+    });
+  }
+
+  if (hint) hint.textContent = playlistsState.done ? "סוף הרשימה." : "";
 }
+
+async function playlistsLoadMore(token){
+  if (playlistsState.loading || playlistsState.done) return;
+  playlistsState.loading = true;
+
+  const btn = document.getElementById("plMoreBtn");
+  const hint = document.getElementById("plHint");
+  const grid = document.getElementById("plGrid");
+
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
+
+  const url = `/api/playlists?limit=60${playlistsState.cursor ? `&cursor=${encodeURIComponent(playlistsState.cursor)}` : ""}`;
+  const data = await api(url);
+
+  if (token !== playlistsState.token) {
+    playlistsState.loading = false;
+    return;
+  }
+
+  const pls = data.playlists || [];
+  if (pls.length) {
+    grid.insertAdjacentHTML("beforeend", pls.map(renderPlaylistCard).join(""));
+  }
+
+  playlistsState.cursor = data.next_cursor || null;
+  playlistsState.done = !playlistsState.cursor || pls.length === 0;
+
+  if (btn) {
+    btn.disabled = false;
+    btn.style.display = (typeof IntersectionObserver === "undefined" && !playlistsState.done) ? "inline-flex" : "none";
+  }
+  if (hint) hint.textContent = playlistsState.done ? "סוף הרשימה." : "";
+
+  if (playlistsState.done) stopActiveObserver();
+
+  playlistsState.loading = false;
+}
+
 
 /* ---------- SEARCH (with cursor pagination) ---------- */
 let searchState = { key: "", cursor: null, loading: false, done: false, token: 0 };
