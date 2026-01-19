@@ -49,8 +49,6 @@ async function subscribeTopic({ env, request, topic_url, channel_int }) {
 export async function onRequest({ env, request }) {
   if (request.method !== "POST") return new Response("use POST", { status: 200 });
 
-  const token = request.headers.get("x-admin-token") || "";
-  if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return unauthorized();
 
   const body = await request.json().catch(() => ({}));
   const force = !!body.force;
