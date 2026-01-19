@@ -1,5 +1,4 @@
 export async function onRequest({ env, request }) {
-  const url = new URL(request.url);
-  const assetUrl = new URL("/k9p1.html", url);
-  return env.ASSETS.fetch(new Request(assetUrl, request));
+  // מגיש את הדף כ-asset לפי ה-URL הנוכחי (/k9p1) בלי לעבור דרך /k9p1.html
+  return env.ASSETS.fetch(request);
 }
