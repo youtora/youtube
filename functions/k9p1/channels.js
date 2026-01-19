@@ -3,8 +3,6 @@
 function unauthorized() { return new Response("unauthorized", { status: 401 }); }
 
 export async function onRequest({ env, request }) {
-  const token = request.headers.get("x-admin-token") || "";
-  if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return unauthorized();
 
   if (request.method === "GET") {
     // קריאה אחת: רשימת ערוצים + מצב WebSub אם קיים
