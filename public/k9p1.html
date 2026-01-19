@@ -33,7 +33,7 @@
     const token=document.getElementById('token').value.trim();
     const channel_id=document.getElementById('channel_id').value.trim();
     if(!channel_id) return out("חסר channel_id");
-    const res=await fetch('/admin/add-channel',{
+    const res=await fetch('/k9p1/add-channel',{
       method:'POST',
       headers:{'content-type':'application/json','x-admin-token':token},
       body:JSON.stringify({channel_id})
