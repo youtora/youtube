@@ -3,11 +3,7 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // רק GET
-  // עמוד ניהול: אל תעביר ל-.html (Pages עושה Clean URLs), רק תן ל-ASSETS לטפל בזה
-  if (path === "/admin" || path === "/admin/" || path === "/admin.html") {
-    return env.ASSETS.fetch(request);
-  }
+
 
   if (request.method !== "GET") return env.ASSETS.fetch(request);
 
