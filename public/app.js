@@ -15,8 +15,300 @@ async function api(url){
   return JSON.parse(t);
 }
 
+/* ========= NetFree (סימון פתוח/סגור + סינון) =========
+   הערה: זה עובד רק אם במכשיר של המשתמש יש גישה ל"test-url" של נטפרי.
+   אם אין גישה (CORS/חסימה/לא נטפרי) – נציג "לא ניתן לבדוק" והמצב יישאר "לא ידוע".
+*/
+
+const NF = {
+  filter: localStorage.getItem("nf_filter") || "all", // "all" | "open"
+  cacheKey: "nf_cache_v1",
+  cacheTtlMs: 7 * 24 * 60 * 60 * 1000,
+  maxConcurrent: 6,
+};
+
+const nfMemory = new Map();
+let nfStore = loadNfStore();
+let nfPending = new Set();
+let nfQueue = [];
+let nfActive = 0;
+let nfObserver = null;
+let nfAvailability = null; // null | true | false
+
+function ytWatchUrl(videoId){
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
+function loadNfStore(){
+  try {
+    const raw = localStorage.getItem(NF.cacheKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveNfStore(){
+  try {
+    // פרונינג בסיסי כדי שלא יתנפח בלי סוף
+    const entries = Object.entries(nfStore);
+    if (entries.length > 1200) {
+      entries.sort((a,b)=> (b[1]?.t||0) - (a[1]?.t||0));
+      nfStore = Object.fromEntries(entries.slice(0, 900));
+    }
+    localStorage.setItem(NF.cacheKey, JSON.stringify(nfStore));
+  } catch {}
+}
+
+function nfGetCached(videoId){
+  if (nfMemory.has(videoId)) return nfMemory.get(videoId);
+
+  const e = nfStore?.[videoId];
+  if (!e || !e.s || !e.t) return null;
+  if ((Date.now() - e.t) > NF.cacheTtlMs) return null;
+
+  nfMemory.set(videoId, e.s);
+  return e.s;
+}
+
+function nfSetCached(videoId, status){
+  nfMemory.set(videoId, status);
+  nfStore[videoId] = { s: status, t: Date.now() };
+  saveNfStore();
+}
+
+function nfSetHint(text){
+  const el = document.getElementById("nfHint");
+  if (!el) return;
+  el.textContent = text || "";
+}
+
+function nfSetFilter(mode){
+  NF.filter = (mode === "open") ? "open" : "all";
+  try { localStorage.setItem("nf_filter", NF.filter); } catch {}
+  nfSyncFilterButtons();
+  nfApplyFilter(document);
+}
+
+function nfSyncFilterButtons(){
+  const ctrl = document.getElementById("nfCtrl");
+  if (!ctrl) return;
+  for (const b of ctrl.querySelectorAll(".nfPill[data-nf-mode]")) {
+    b.classList.toggle("active", (b.getAttribute("data-nf-mode") || "") === NF.filter);
+  }
+}
+
+function nfHookControls(){
+  const ctrl = document.getElementById("nfCtrl");
+  if (!ctrl) return;
+  ctrl.addEventListener("click", (e)=>{
+    const btn = e.target.closest(".nfPill[data-nf-mode]");
+    if (!btn) return;
+    nfSetFilter(btn.getAttribute("data-nf-mode"));
+  });
+  nfSyncFilterButtons();
+}
+
+function nfEnsureObserver(){
+  if (nfObserver) return;
+  if (typeof IntersectionObserver === "undefined") return;
+
+  nfObserver = new IntersectionObserver((entries)=>{
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const el = e.target;
+      try { nfObserver.unobserve(el); } catch {}
+      const vid = el?.dataset?.nfVideo;
+      if (vid) nfEnqueue(vid);
+    }
+  }, { root: null, rootMargin: "900px 0px", threshold: 0 });
+}
+
+function nfStopObserver(){
+  if (!nfObserver) return;
+  try { nfObserver.disconnect(); } catch {}
+  nfObserver = null;
+}
+
+function nfScan(root){
+  if (!root) return;
+
+  nfEnsureObserver();
+
+  const items = root.querySelectorAll("a.card[data-nf-video], a.reco[data-nf-video]");
+  for (const el of items) {
+    if (el.dataset.nfInit === "1") continue;
+    el.dataset.nfInit = "1";
+
+    const vid = el.dataset.nfVideo;
+    if (!vid) continue;
+
+    const cached = nfGetCached(vid);
+    if (cached) nfApplyStatusToDom(vid, cached);
+    else nfApplyStatusToDom(vid, "unknown");
+
+    if (nfObserver) {
+      try { nfObserver.observe(el); } catch {}
+    } else {
+      nfEnqueue(vid);
+    }
+  }
+
+  nfApplyFilter(root);
+}
+
+function nfApplyFilter(root){
+  const mode = NF.filter;
+  const items = (root || document).querySelectorAll("a.card[data-nf-video], a.reco[data-nf-video]");
+
+  // אם הבדיקה לא זמינה – נציג הודעה ולא נדרוס אותה בסטטיסטיקה
+  if (nfAvailability === false) {
+    nfSetHint("לא ניתן לבצע בדיקת נטפרי בדפדפן הזה (ככל הנראה אין שירות בדיקה זמין למשתמש)");
+  }
+
+  let open = 0, blocked = 0, unknown = 0;
+
+  for (const el of items) {
+    const st = el.dataset.nfStatus || "unknown";
+    if (st === "open") open++;
+    else if (st === "blocked") blocked++;
+    else unknown++;
+
+    // "רק פתוחים": מסתירים רק מה שבטוח חסום.
+    // פריטים שעדיין "... בודק" נשארים מוצגים (אבל מעומעמים), כדי שה-IO ימשיך לזהות ולבדוק אותם.
+    const hide = (mode === "open") && (st === "blocked");
+    el.classList.toggle("nfHidden", hide);
+    el.classList.toggle("nfDim", (mode === "open") && (st === "unknown"));
+  }
+
+  // סטטיסטיקה קטנה ליד הכפתורים (רק אם יש בכלל פריטים בדף)
+  if (nfAvailability !== false) {
+    if (items.length) nfSetHint(`✅ ${open}  ❌ ${blocked}  … ${unknown}`);
+    else nfSetHint("");
+  }
+}
+
+function nfApplyStatusToDom(videoId, status){
+  // עדכן wrappers (cards / reco)
+  const safe = (typeof CSS !== "undefined" && CSS.escape)
+    ? CSS.escape(videoId)
+    : String(videoId).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  const wrappers = document.querySelectorAll(`a.card[data-nf-video=\"${safe}\"], a.reco[data-nf-video=\"${safe}\"]`);
+  for (const w of wrappers) {
+    w.dataset.nfStatus = status;
+  }
+
+  // עדכן badges
+  const badges = document.querySelectorAll(`[data-nf-badge][data-nf-video=\"${safe}\"]`);
+  for (const b of badges) {
+    b.classList.remove("nfOpen", "nfBlocked", "nfUnknown");
+    if (status === "open") {
+      b.classList.add("nfOpen");
+      b.textContent = "✅ פתוח";
+    } else if (status === "blocked") {
+      b.classList.add("nfBlocked");
+      b.textContent = "❌ חסום";
+    } else {
+      b.classList.add("nfUnknown");
+      b.textContent = "… בודק";
+    }
+  }
+
+  nfApplyFilter(document);
+}
+
+function nfEnqueue(videoId){
+  if (!videoId) return;
+
+  const cached = nfGetCached(videoId);
+  if (cached) {
+    nfApplyStatusToDom(videoId, cached);
+    return;
+  }
+
+  if (nfPending.has(videoId)) return;
+  nfPending.add(videoId);
+  nfQueue.push(videoId);
+  nfPump();
+}
+
+async function nfPump(){
+  while (nfActive < NF.maxConcurrent && nfQueue.length) {
+    const videoId = nfQueue.shift();
+    nfActive++;
+
+    nfCheckVideo(videoId)
+      .catch(()=>{})
+      .finally(()=>{
+        nfActive--;
+        nfPending.delete(videoId);
+        nfPump();
+      });
+  }
+}
+
+async function nfCheckVideo(videoId){
+  // אם כבר הבנו שהבדיקה לא זמינה – אל נבזבז בקשות
+  if (nfAvailability === false) {
+    nfApplyStatusToDom(videoId, "unknown");
+    return;
+  }
+
+  const url = ytWatchUrl(videoId);
+  const status = await nfCheckUrlViaNetfreeTest(url);
+
+  if (status === "open" || status === "blocked") {
+    nfSetCached(videoId, status);
+  }
+
+  nfApplyStatusToDom(videoId, status);
+}
+
+async function nfCheckUrlViaNetfreeTest(url){
+  // נתיב נפוץ אצל משתמשי נטפרי: google.com/~netfree/test-url?u=
+  const testUrl = `https://www.google.com/~netfree/test-url?u=${encodeURIComponent(url)}`;
+
+  try {
+    const r = await fetch(testUrl, {
+      method: "GET",
+      cache: "no-store",
+      // mode:"cors" ברירת מחדל – אם CORS לא מאפשר, זה יזרוק TypeError
+      credentials: "omit",
+    });
+
+    const txt = await r.text();
+    let j = null;
+    try { j = JSON.parse(txt); } catch {}
+
+    // עדכון “זמין/לא זמין” לפי הצלחה ראשונה
+    if (nfAvailability !== true) nfAvailability = true;
+
+    // פירוש גמיש – כי לפעמים המבנה משתנה
+    if (j && typeof j.block === "boolean") return j.block ? "blocked" : "open";
+    if (j && typeof j.blocked === "boolean") return j.blocked ? "blocked" : "open";
+    if (j && typeof j.isBlocked === "boolean") return j.isBlocked ? "blocked" : "open";
+
+    const code = (typeof j?.status === "number") ? j.status : (typeof j?.code === "number" ? j.code : null);
+    if (code === 418) return "blocked";
+    if (code != null && code >= 200 && code < 400) return "open";
+
+    // אם אין מידע ברור – נשאר "לא ידוע"
+    return "unknown";
+  } catch {
+    // אם כאן נפלנו – לרוב זה אומר CORS/לא נטפרי/הנתיב לא נגיש
+    nfAvailability = false;
+    // כדי שלא ייראה "ריק" במצב "רק פתוחים"
+    if (NF.filter === "open") nfSetFilter("all");
+    nfSetHint("לא ניתן לבצע בדיקת נטפרי בדפדפן הזה (ככל הנראה אין שירות בדיקה זמין למשתמש)");
+    return "unknown";
+  }
+}
+
 function setPage(inner){
   $("page").innerHTML = `<div class="pad">${inner}</div>`;
+  // כל ניווט מחליף DOM – נאתחל מחדש את הסריקה וה-observer
+  nfStopObserver();
+  queueMicrotask(()=>nfScan(document.getElementById("page")));
 }
 
 function navigate(path){
@@ -66,12 +358,14 @@ function headerSearch(){
 function renderVideoCard(v){
   const thumb = ytVideoThumb(v.video_id);
   const d = fmtDate(v.published_at);
+  const vid = v.video_id;
   return `
-    <a class="card" href="/${encodeURIComponent(v.video_id)}" data-link>
+    <a class="card" href="/${encodeURIComponent(vid)}" data-link data-nf-video="${esc(vid)}">
       <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
       <div class="cardBody">
-        <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+        <div class="cardTitle">${esc(v.title || vid)}</div>
         <div class="cardMeta">
+          <span class="nfBadge nfUnknown" data-nf-badge data-nf-video="${esc(vid)}">… בודק</span>
           ${v.channel_title || v.channel_id ? `<span>${esc(v.channel_title || v.channel_id)}</span>` : ``}
           ${d ? `<span>${esc(d)}</span>` : ``}
         </div>
@@ -186,6 +480,7 @@ async function homeLoadMore(token){
   const vids = data.videos || [];
   if (vids.length) {
     grid.insertAdjacentHTML("beforeend", vids.map(renderVideoCard).join(""));
+    nfScan(grid);
   }
 
   homeState.cursor = data.next_cursor || null;
@@ -435,6 +730,7 @@ async function searchLoadMore(token, q){
   const results = data.results || data.videos || data.items || [];
   if (results.length) {
     grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
+    nfScan(grid);
   }
 
   // cursor: קודם next_cursor, ואם לא קיים – מהפריט האחרון (cursor)
@@ -598,6 +894,7 @@ async function channelLoadMoreVideos(token, channel_id, channel_title){
   if (vids.length) {
     const html = vids.map(v => renderVideoCard({ ...v, channel_id, channel_title })).join("");
     grid.insertAdjacentHTML("beforeend", html);
+    nfScan(grid);
   }
 
   channelVideosState.cursor = data.videos_next_cursor || null;
@@ -659,11 +956,14 @@ async function pageVideo(video_id){
       <aside class="watchSide">
         <div style="font-weight:900;margin-bottom:8px">סרטונים מוצעים</div>
         ${rec.length ? rec.map(r=>`
-          <a class="reco" href="/${encodeURIComponent(r.video_id)}" data-link>
+          <a class="reco" href="/${encodeURIComponent(r.video_id)}" data-link data-nf-video="${esc(r.video_id)}">
             <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
             <div style="min-width:0">
               <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""}</div>
+              <div class="recoMeta">
+                <span class="nfBadge nfUnknown" data-nf-badge data-nf-video="${esc(r.video_id)}">… בודק</span>
+                ${fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""}
+              </div>
             </div>
           </a>
         `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
@@ -738,4 +1038,5 @@ async function render(){
 /* init */
 hookLinks();
 headerSearch();
+nfHookControls();
 render().catch(showErr);
