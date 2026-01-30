@@ -272,13 +272,6 @@ a:hover{text-decoration:underline}
     max-width:none;
   }
 
-  .nfCtrl{
-    order:4;
-    width:100%;
-    justify-content:flex-start;
-  }
-  .nfHint{max-width:none}
-
   .shell{
     padding:0;           /* אין רווחים מוזרים במובייל */
     margin: 10px auto;
@@ -296,55 +289,3 @@ a:hover{text-decoration:underline}
 @media (max-width: 520px){
   .recoThumb{width:140px}
 }
-
-/* ===== NETFREE (סימון פתוח/סגור + סינון) ===== */
-.nfCtrl{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  flex:0 0 auto;
-  padding:4px 6px;
-  border:1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-}
-.nfLabel{font-size:12px; color:var(--muted); font-weight:800; white-space:nowrap}
-.nfHint{
-  font-size:12px;
-  color:var(--muted);
-  max-width: 240px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.nfPill{
-  border:1px solid var(--border);
-  background: var(--soft);
-  padding:6px 10px;
-  border-radius: 999px;
-  cursor:pointer;
-  font-weight:800;
-  font-size:12px;
-  line-height:1;
-}
-.nfPill:hover{filter:brightness(.98)}
-.nfPill.active{background:#111; color:#fff; border-color:#111}
-
-.nfBadge{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:2px 8px;
-  border-radius: 999px;
-  border:1px solid var(--border);
-  background: var(--soft);
-  font-weight:900;
-  font-size:11px;
-  line-height:1.6;
-}
-.nfBadge.nfOpen{background:#eaf7ef; border-color:#b8e3c6; color:#146c2e}
-.nfBadge.nfBlocked{background:#fdecec; border-color:#f5b5b5; color:#9a1a1a}
-.nfBadge.nfUnknown{background:var(--soft); border-color:var(--border); color:var(--muted)}
-
-.nfHidden{display:none !important;}
-.nfDim{opacity:.6}
