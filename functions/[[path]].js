@@ -27,7 +27,7 @@ export async function onRequest(context) {
         el.prepend(
           `
 <meta property="og:type" content="${esc(meta.type)}">
-<meta property="og:site_name" content="YouTube">
+<meta property="og:site_name" content="Youtora">
 <meta property="og:title" content="${esc(meta.title)}">
 <meta property="og:description" content="${esc(meta.description)}">
 <meta property="og:image" content="${esc(meta.image)}">
