@@ -36,21 +36,22 @@ a:hover{text-decoration:underline}
 
 .brand{
   display:flex; align-items:center; gap:10px;
-  padding:6px 8px;
-  border-radius: 999px;
+  padding:2px 4px;
+  border-radius: 14px;
   white-space:nowrap;
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  flex:0 0 auto;
+  transition: background .18s ease, box-shadow .18s ease;
 }
 .brand:hover{
   background:linear-gradient(180deg,#fff,#fff7fb);
   text-decoration:none;
-  box-shadow:0 10px 26px rgba(124,58,237,.10);
-  transform: translateY(-1px);
+  box-shadow:0 6px 18px rgba(124,58,237,.08);
 }
 .brandLogo{
   display:block;
-  height:42px;
+  height:38px;
   width:auto;
+  max-width:none;
 }
 
 
@@ -264,7 +265,7 @@ a:hover{text-decoration:underline}
 
 /* header במובייל */
 @media (max-width: 720px){
-  .brandLogo{height:36px}
+  .brandLogo{height:32px}
   .topbar{
     flex-wrap:wrap;
     gap:8px;

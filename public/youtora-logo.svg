@@ -1,21 +1,15 @@
-<svg width="720" height="200" viewBox="0 0 720 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="360" height="64" viewBox="0 0 360 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="markGradient" x1="30" y1="20" x2="170" y2="180" gradientUnits="userSpaceOnUse">
+    <linearGradient id="youtoraGradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FF7A59"/>
-      <stop offset="0.5" stop-color="#FF4D6D"/>
+      <stop offset="0.55" stop-color="#FF4D6D"/>
       <stop offset="1" stop-color="#7C3AED"/>
     </linearGradient>
-    <filter id="softShadow" x="0" y="0" width="210" height="210" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="16" stdDeviation="14" flood-color="#8B5CF6" flood-opacity="0.18"/>
-    </filter>
   </defs>
 
-  <g filter="url(#softShadow)">
-    <rect x="20" y="22" width="160" height="156" rx="42" fill="url(#markGradient)"/>
-    <rect x="31" y="33" width="138" height="134" rx="34" stroke="white" stroke-opacity="0.25" stroke-width="2"/>
-    <path d="M93 71.5C93 66.5438 98.4626 63.5652 102.618 66.2533L140.31 90.7108C144.136 93.1859 144.136 98.8141 140.31 101.289L102.618 125.747C98.4626 128.435 93 125.456 93 120.5V71.5Z" fill="white" fill-opacity="0.98"/>
-  </g>
+  <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#youtoraGradient)"/>
+  <rect x="11" y="11" width="42" height="42" rx="13" stroke="white" stroke-opacity="0.28" stroke-width="1.6"/>
+  <path d="M26.2 21.6C26.2 19.3768 28.6501 18.0409 30.5144 19.2479L41.9456 26.6479C43.6614 27.7586 43.6614 30.2414 41.9456 31.3521L30.5144 38.7521C28.6501 39.9591 26.2 38.6232 26.2 36.4V21.6Z" fill="white"/>
 
-  <text x="214" y="110" fill="#111827" font-family="Inter, Arial, system-ui, sans-serif" font-size="72" font-weight="800" letter-spacing="-1.5">Youtora</text>
-  <text x="217" y="145" fill="#6B7280" font-family="Inter, Arial, system-ui, sans-serif" font-size="22" font-weight="500" letter-spacing="0.2">Smart YouTube Library</text>
+  <text x="74" y="42" fill="#0F172A" font-family="Inter, Arial, system-ui, sans-serif" font-size="36" font-weight="800" letter-spacing="-1.2">Youtora</text>
 </svg>
