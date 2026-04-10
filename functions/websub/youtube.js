@@ -64,6 +64,52 @@ function channelIdFromTopic(topic) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function parseIsoDurationSec(iso) {
+  const m = String(iso || "").match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!m) return null;
+  const days = parseInt(m[1] || "0", 10);
+  const hours = parseInt(m[2] || "0", 10);
+  const mins = parseInt(m[3] || "0", 10);
+  const secs = parseInt(m[4] || "0", 10);
+  return (((days * 24) + hours) * 60 + mins) * 60 + secs;
+}
+
+function classifyVideoItem(it) {
+  if (it?.liveStreamingDetails) return "L";
+  const sec = parseIsoDurationSec(it?.contentDetails?.duration || "");
+  if (Number.isFinite(sec) && sec > 0 && sec < 180) return "S";
+  return "";
+}
+
+async function ytJson(url) {
+  const r = await fetch(url);
+  const t = await r.text();
+  if (!r.ok) throw new Error(`YT ${r.status}: ${t.slice(0, 200)}`);
+  return JSON.parse(t);
+}
+
+async function fetchVideoKinds(env, ids) {
+  const out = new Map();
+  const uniq = [...new Set((ids || []).filter(Boolean))];
+  if (!env.YT_API_KEY || !uniq.length) return out;
+
+  for (let i = 0; i < uniq.length; i += 50) {
+    const chunk = uniq.slice(i, i + 50);
+    const u = new URL("https://www.googleapis.com/youtube/v3/videos");
+    u.searchParams.set("part", "contentDetails,liveStreamingDetails");
+    u.searchParams.set("id", chunk.join(","));
+    u.searchParams.set("maxResults", String(chunk.length));
+    u.searchParams.set("key", env.YT_API_KEY);
+
+    const data = await ytJson(u.toString());
+    for (const it of (data?.items || [])) {
+      if (it?.id) out.set(it.id, classifyVideoItem(it));
+    }
+  }
+
+  return out;
+}
+
 async function sha1HmacHex(secret, bodyU8) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -96,9 +142,6 @@ export async function onRequest({ env, request }) {
   const url = new URL(request.url);
   const debug = url.searchParams.get("debug") === "1";
 
-  // =========================
-  // אימות GET מה-Hub (challenge)
-  // =========================
   if (request.method === "GET") {
     const mode = (url.searchParams.get("hub.mode") || "").trim();
     const topicRaw = (url.searchParams.get("hub.topic") || "").trim();
@@ -122,8 +165,6 @@ export async function onRequest({ env, request }) {
     const now = nowSec();
     const leaseExp = leaseSec ? (now + leaseSec) : null;
 
-    // ✅ אצלך subscriptions.channel_int NOT NULL
-    // לכן חייבים למצוא channel_int לפני INSERT/UPSERT
     const channelId = channelIdFromTopic(topic);
     const ch = channelId
       ? await env.DB.prepare(`SELECT id FROM channels WHERE channel_id=? LIMIT 1`).bind(channelId).first()
@@ -131,8 +172,6 @@ export async function onRequest({ env, request }) {
 
     const channelInt = ch?.id ?? null;
 
-    // אם לא מצאנו channel_int – לא ננסה INSERT כדי לא לקרוס,
-    // אבל עדיין נחזיר challenge כדי שה-Hub יוכל להשלים verification.
     if (topic && channelInt) {
       await env.DB.prepare(`
         INSERT INTO subscriptions(topic_url, channel_int, status, lease_expires_at, last_subscribed_at, last_error)
@@ -169,9 +208,6 @@ export async function onRequest({ env, request }) {
     });
   }
 
-  // =========================
-  // התראות POST מה-Hub (notify)
-  // =========================
   if (request.method === "POST") {
     const bodyBuf = await request.arrayBuffer();
     const bodyU8 = new Uint8Array(bodyBuf);
@@ -206,7 +242,6 @@ export async function onRequest({ env, request }) {
       return new Response(null, { status: 204 });
     }
 
-    // 1) מיפוי לפי subscriptions.topic_url (אם קיים)
     let channelInt = null;
 
     if (topicHdr) {
@@ -220,7 +255,6 @@ export async function onRequest({ env, request }) {
       channelInt = sub?.channel_int ?? null;
     }
 
-    // 2) fallback לפי channel_id מתוך topic או XML → channels.id
     if (!channelInt) {
       const channelId = channelIdFromTopic(topicHdr) || (entries.find(e => e.channelId)?.channelId || null);
 
@@ -247,23 +281,27 @@ export async function onRequest({ env, request }) {
     }
 
     const now = nowSec();
+    const videoKinds = await fetchVideoKinds(env, entries.map(e => e.videoId));
     const stmts = [];
 
     for (const e of entries) {
       const title = (e.title || "").slice(0, 200);
+      const videoKind = videoKinds.has(e.videoId) ? videoKinds.get(e.videoId) : null;
       stmts.push(env.DB.prepare(`
-        INSERT INTO videos(video_id, channel_int, title, published_at, updated_at)
-        VALUES(?, ?, ?, ?, ?)
+        INSERT INTO videos(video_id, channel_int, title, published_at, video_kind, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?)
         ON CONFLICT(video_id) DO UPDATE SET
           channel_int   = excluded.channel_int,
           title         = excluded.title,
           published_at  = CASE WHEN excluded.published_at > 0 THEN excluded.published_at ELSE videos.published_at END,
+          video_kind    = CASE WHEN excluded.video_kind IS NOT NULL THEN excluded.video_kind ELSE videos.video_kind END,
           updated_at    = excluded.updated_at
         WHERE
           videos.channel_int IS NOT excluded.channel_int
           OR videos.title IS NOT excluded.title
           OR (excluded.published_at > 0 AND videos.published_at != excluded.published_at)
-      `).bind(e.videoId, channelInt, title, e.published_at ?? 0, now));
+          OR (excluded.video_kind IS NOT NULL AND COALESCE(videos.video_kind, '') != excluded.video_kind)
+      `).bind(e.videoId, channelInt, title, e.published_at ?? 0, videoKind, now));
     }
 
     if (stmts.length) await env.DB.batch(stmts);
