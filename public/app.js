@@ -7,6 +7,11 @@ function fmtDate(unix){
   catch { return ""; }
 }
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
+function videoKindLabel(kind){
+  if(kind === "S") return "שורט";
+  if(kind === "L") return "שידור חי";
+  return "";
+}
 
 async function api(url){
   const r = await fetch(url);
@@ -72,6 +77,7 @@ function renderVideoCard(v){
       <div class="cardBody">
         <div class="cardTitle">${esc(v.title || v.video_id)}</div>
         <div class="cardMeta">
+          ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
           ${v.channel_title || v.channel_id ? `<span>${esc(v.channel_title || v.channel_id)}</span>` : ``}
           ${d ? `<span>${esc(d)}</span>` : ``}
         </div>
@@ -116,92 +122,108 @@ function startInfiniteScroll({ sentinelEl, onNearEnd, enabled = true, rootMargin
   return obs;
 }
 
-/* ---------- HOME: infinite load ---------- */
-let homeState = { cursor: null, loading: false, done: false, token: 0 };
+/* ---------- LATEST PAGES: home / shorts / live ---------- */
+let latestState = { kind: "", cursor: null, loading: false, done: false, token: 0 };
 
-async function pageHome(){
-  homeState = { cursor: null, loading: false, done: false, token: homeState.token + 1 };
-  const t = homeState.token;
+function latestPageMeta(kind){
+  if(kind === "S") return { title: "שורטים", sub: "השורטים האחרונים מכל הערוצים" };
+  if(kind === "L") return { title: "שידורים חיים", sub: "השידורים החיים האחרונים מכל הערוצים" };
+  return { title: "בית", sub: "הסרטונים האחרונים מכל הערוצים" };
+}
+
+async function pageLatest(kind=""){
+  latestState = { kind, cursor: null, loading: false, done: false, token: latestState.token + 1 };
+  const t = latestState.token;
+  const meta = latestPageMeta(kind);
 
   setPage(`
-    <div class="h1">בית</div>
-    <p class="sub">הסרטונים האחרונים מכל הערוצים</p>
+    <div class="h1">${esc(meta.title)}</div>
+    <p class="sub">${esc(meta.sub)}</p>
     <div class="hr"></div>
 
-    <div id="homeGrid" class="grid"></div>
+    <div id="latestGrid" class="grid"></div>
 
-    <!-- sentinel קטן לטעינה עצלה -->
-    <div id="homeSentinel" style="height:1px"></div>
+    <div id="latestSentinel" style="height:1px"></div>
 
-    <!-- fallback button (בדרך כלל מוסתר) -->
     <div class="btnRow" style="margin-top:14px">
-      <button id="homeMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
+      <button id="latestMoreBtn" class="btn" type="button" style="display:none">טען עוד</button>
     </div>
 
-    <div id="homeHint" class="muted" style="margin-top:8px"></div>
+    <div id="latestHint" class="muted" style="margin-top:8px"></div>
   `);
 
-  const btn = document.getElementById("homeMoreBtn");
-  const hint = document.getElementById("homeHint");
-  const sentinel = document.getElementById("homeSentinel");
+  const btn = document.getElementById("latestMoreBtn");
+  const hint = document.getElementById("latestHint");
+  const sentinel = document.getElementById("latestSentinel");
 
-  btn.onclick = () => homeLoadMore(t);
+  btn.onclick = () => latestLoadMore(t);
 
-  // אם אין IntersectionObserver, נציג כפתור
   const hasIO = typeof IntersectionObserver !== "undefined";
   if (!hasIO) btn.style.display = "inline-flex";
 
-  // טען מנה ראשונה
-  await homeLoadMore(t);
+  await latestLoadMore(t);
 
-  // הפעל infinite scroll (רק אם יש IO)
   if (hasIO) {
     startInfiniteScroll({
       sentinelEl: sentinel,
-      onNearEnd: () => homeLoadMore(t),
+      onNearEnd: () => latestLoadMore(t),
       enabled: true,
       rootMargin: "900px 0px",
     });
-    hint.textContent = homeState.done ? "סוף הרשימה." : "";
+    hint.textContent = latestState.done ? "סוף הרשימה." : "";
   }
 }
 
-async function homeLoadMore(token){
-  if (homeState.loading || homeState.done) return;
-  homeState.loading = true;
+async function latestLoadMore(token){
+  if (latestState.loading || latestState.done) return;
+  latestState.loading = true;
 
-  const btn = document.getElementById("homeMoreBtn");
-  const hint = document.getElementById("homeHint");
-  const grid = document.getElementById("homeGrid");
+  const btn = document.getElementById("latestMoreBtn");
+  const hint = document.getElementById("latestHint");
+  const grid = document.getElementById("latestGrid");
 
   if (btn) btn.disabled = true;
   if (hint) hint.textContent = "טוען…";
 
-  const url = `/api/latest?limit=24${homeState.cursor ? `&cursor=${encodeURIComponent(homeState.cursor)}` : ""}`;
+  const url =
+    `/api/latest?limit=24` +
+    (latestState.kind ? `&kind=${encodeURIComponent(latestState.kind)}` : "") +
+    (latestState.cursor ? `&cursor=${encodeURIComponent(latestState.cursor)}` : "");
+
   const data = await api(url);
 
-  // אם יצאנו מהדף באמצע
-  if (token !== homeState.token) return;
+  if (token !== latestState.token) return;
 
   const vids = data.videos || [];
   if (vids.length) {
     grid.insertAdjacentHTML("beforeend", vids.map(renderVideoCard).join(""));
   }
 
-  homeState.cursor = data.next_cursor || null;
-  homeState.done = !homeState.cursor || vids.length === 0;
+  latestState.cursor = data.next_cursor || null;
+  latestState.done = !latestState.cursor || vids.length === 0;
 
   if (btn) {
     btn.disabled = false;
-    // כפתור נשאר רק fallback
-    btn.style.display = (typeof IntersectionObserver === "undefined" && !homeState.done) ? "inline-flex" : "none";
+    btn.style.display = (typeof IntersectionObserver === "undefined" && !latestState.done) ? "inline-flex" : "none";
   }
 
-  if (hint) hint.textContent = homeState.done ? "סוף הרשימה." : "";
+  if (hint) hint.textContent = latestState.done ? "סוף הרשימה." : "";
 
-  if (homeState.done) stopActiveObserver();
+  if (latestState.done) stopActiveObserver();
 
-  homeState.loading = false;
+  latestState.loading = false;
+}
+
+async function pageHome(){
+  return pageLatest("");
+}
+
+async function pageShorts(){
+  return pageLatest("S");
+}
+
+async function pageLive(){
+  return pageLatest("L");
 }
 
 /* ---------- PAGES: channels list ---------- */
@@ -469,12 +491,18 @@ let channelVideosState = { key: "", cursor: null, loading: false, done: false, t
 async function pageChannel(channel_id, tab){
   stopActiveObserver();
 
-  const activeTab = (tab === "playlists") ? "playlists" : "videos";
+  const activeTab = ["videos", "playlists", "shorts", "live"].includes(tab) ? tab : "videos";
+  const kind = activeTab === "shorts" ? "S" : activeTab === "live" ? "L" : "";
 
   setPage(`<div class="muted">טוען ערוץ…</div>`);
 
   const include_playlists = activeTab === "playlists" ? "1" : "0";
-  const data = await api(`/api/channel?channel_id=${encodeURIComponent(channel_id)}&include_playlists=${include_playlists}&videos_limit=24`);
+  const data = await api(
+    `/api/channel?channel_id=${encodeURIComponent(channel_id)}` +
+    `&include_playlists=${include_playlists}` +
+    `&videos_limit=24` +
+    (kind ? `&kind=${encodeURIComponent(kind)}` : "")
+  );
 
   const ch = data.channel;
   const playlists = data.playlists || [];
@@ -495,6 +523,8 @@ async function pageChannel(channel_id, tab){
 
     <div class="tabs">
       <a class="tab ${activeTab==="videos"?"active":""}" href="/${encodeURIComponent(channel_id)}/videos" data-link>סרטונים</a>
+      <a class="tab ${activeTab==="shorts"?"active":""}" href="/${encodeURIComponent(channel_id)}/shorts" data-link>שורטים</a>
+      <a class="tab ${activeTab==="live"?"active":""}" href="/${encodeURIComponent(channel_id)}/live" data-link>שידורים חיים</a>
       <a class="tab ${activeTab==="playlists"?"active":""}" href="/${encodeURIComponent(channel_id)}/playlists" data-link>פלייליסטים</a>
     </div>
   `;
@@ -524,9 +554,8 @@ async function pageChannel(channel_id, tab){
     return;
   }
 
-  // VIDEOS tab
   channelVideosState = {
-    key: channel_id,
+    key: `${channel_id}|${kind}`,
     cursor: data.videos_next_cursor || null,
     loading: false,
     done: !data.videos_next_cursor,
@@ -555,7 +584,7 @@ async function pageChannel(channel_id, tab){
   const hint = document.getElementById("chHint");
   const sentinel = document.getElementById("chSentinel");
 
-  btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title);
+  btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title, kind);
 
   const hasIO = typeof IntersectionObserver !== "undefined";
   if (!hasIO && !channelVideosState.done) btn.style.display = "inline-flex";
@@ -564,16 +593,16 @@ async function pageChannel(channel_id, tab){
   if (hasIO && !channelVideosState.done) {
     startInfiniteScroll({
       sentinelEl: sentinel,
-      onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title),
+      onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title, kind),
       enabled: true,
       rootMargin: "200px 0px",
     });
   }
 }
 
-async function channelLoadMoreVideos(token, channel_id, channel_title){
+async function channelLoadMoreVideos(token, channel_id, channel_title, kind=""){
   if (channelVideosState.loading || channelVideosState.done) return;
-  if (channelVideosState.key !== channel_id) return;
+  if (channelVideosState.key !== `${channel_id}|${kind}`) return;
 
   channelVideosState.loading = true;
 
@@ -588,6 +617,7 @@ async function channelLoadMoreVideos(token, channel_id, channel_title){
     `/api/channel?channel_id=${encodeURIComponent(channel_id)}` +
     `&include_channel=0&include_playlists=0&include_videos=1` +
     `&videos_limit=24` +
+    (kind ? `&kind=${encodeURIComponent(kind)}` : "") +
     (channelVideosState.cursor ? `&videos_cursor=${encodeURIComponent(channelVideosState.cursor)}` : "");
 
   const data = await api(url);
@@ -712,14 +742,16 @@ async function render(){
   const { parts, qs } = route();
 
   if(parts.length === 0) return pageHome();
+  if(parts[0] === "shorts") return pageShorts();
+  if(parts[0] === "live") return pageLive();
   if(parts[0] === "channels") return pageChannels();
   if(parts[0] === "playlists") return pagePlaylists();
   if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim());
 
-  // /UC.../videos or /UC.../playlists
+  // /UC.../videos /shorts /live /playlists
   if(parts.length >= 1 && isChannelId(parts[0])){
     const tab = parts[1] || "videos";
-    return pageChannel(parts[0], tab === "playlists" ? "playlists" : "videos");
+    return pageChannel(parts[0], ["videos", "shorts", "live", "playlists"].includes(tab) ? tab : "videos");
   }
 
   // /PL...
