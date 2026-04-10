@@ -9,9 +9,8 @@ export async function onRequest({ env, request }) {
 
   const recLimit = clamp(parseInt(url.searchParams.get("recommended_limit") || "20", 10), 1, 60);
 
-  // 1) מביאים את הסרטון פעם אחת (כולל channel_int)
   const vrow = await env.DB.prepare(`
-    SELECT id, video_id, title, published_at, channel_int
+    SELECT id, video_id, title, published_at, channel_int, video_kind
     FROM videos
     WHERE video_id = ?
     LIMIT 1
@@ -19,7 +18,6 @@ export async function onRequest({ env, request }) {
 
   if (!vrow) return new Response("not found", { status: 404 });
 
-  // 2) מביאים פרטי ערוץ פעם אחת (שורה אחת)
   const crow = await env.DB.prepare(`
     SELECT channel_id, title AS channel_title, thumbnail_url
     FROM channels
@@ -31,14 +29,14 @@ export async function onRequest({ env, request }) {
     video_id: vrow.video_id,
     title: vrow.title,
     published_at: vrow.published_at,
+    video_kind: vrow.video_kind || "",
     channel_id: crow?.channel_id || null,
     channel_title: crow?.channel_title || null,
     thumbnail_url: crow?.thumbnail_url || null,
   };
 
-  // 3) “מוצעים” מאותו ערוץ — דפדוף על האינדקס של הערוץ (בלי subquery, בלי NULL-order)
   const rec = await env.DB.prepare(`
-    SELECT video_id, title, published_at
+    SELECT video_id, title, published_at, video_kind
     FROM videos INDEXED BY idx_videos_channel_cover
     WHERE channel_int = ?
       AND video_id <> ?

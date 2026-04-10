@@ -20,13 +20,13 @@ export async function onRequest({ env, request }) {
   const channel_id = (url.searchParams.get("channel_id") || "").trim();
   if (!channel_id) return new Response("missing channel_id", { status: 400 });
 
-  // Optional includes (client שלך כבר שולח 0 לערוץ/פלייליסטים)
   const include_channel = url.searchParams.get("include_channel") !== "0";
   const include_playlists = url.searchParams.get("include_playlists") !== "0";
   const include_videos = url.searchParams.get("include_videos") !== "0";
 
-  // ניסוי כמו ב-latest: נחזיר 200 בכל קריאה כדי לצמצם overhead של הרבה שאילתות
-  // (הלקוח שלך שולח videos_limit=24, אנחנו מתעלמים כרגע בשביל המדידה)
+  const kindRaw = (url.searchParams.get("kind") || "").trim().toUpperCase();
+  const kind = (kindRaw === "S" || kindRaw === "L") ? kindRaw : null;
+
   const videos_limit = 200;
 
   const videos_cursor_raw =
@@ -35,8 +35,6 @@ export async function onRequest({ env, request }) {
 
   const { p: cursorP, id: cursorId } = parseCursor(videos_cursor_raw);
 
-  // כדי להשיג channel_int (ה-id הפנימי)
-  // אם לא מבקשים להחזיר פרטי ערוץ/פלייליסטים, מספיק לנו רק id.
   const chRow = await env.DB.prepare(
     include_channel || include_playlists
       ? `
@@ -55,7 +53,6 @@ export async function onRequest({ env, request }) {
 
   const out = {};
 
-  // Channel info
   if (include_channel) {
     out.channel = {
       channel_id: chRow.channel_id,
@@ -64,7 +61,6 @@ export async function onRequest({ env, request }) {
     };
   }
 
-  // Playlists (כמו שהיה)
   if (include_playlists) {
     const plLimit = clamp(parseInt(url.searchParams.get("playlists_limit") || "50", 10), 1, 200);
     const pls = await env.DB.prepare(`
@@ -78,32 +74,56 @@ export async function onRequest({ env, request }) {
     out.playlists = pls.results || [];
   }
 
-  // Videos pagination (העיקר)
   if (include_videos) {
-    const vids =
-      (cursorP !== null && cursorId > 0)
-        ? await env.DB.prepare(`
-            SELECT id, video_id, title, published_at
-            FROM videos INDEXED BY idx_videos_channel_cover
-            WHERE channel_int = ?
-              AND (published_at, id) < (?, ?)
-            ORDER BY published_at DESC, id DESC
-            LIMIT ?
-          `).bind(chRow.id, cursorP, cursorId, videos_limit).all()
-        : await env.DB.prepare(`
-            SELECT id, video_id, title, published_at
-            FROM videos INDEXED BY idx_videos_channel_cover
-            WHERE channel_int = ?
-            ORDER BY published_at DESC, id DESC
-            LIMIT ?
-          `).bind(chRow.id, videos_limit).all();
+    let vids;
+
+    if (kind) {
+      vids =
+        (cursorP !== null && cursorId > 0)
+          ? await env.DB.prepare(`
+              SELECT id, video_id, title, published_at, video_kind
+              FROM videos
+              WHERE channel_int = ?
+                AND video_kind = ?
+                AND (published_at, id) < (?, ?)
+              ORDER BY published_at DESC, id DESC
+              LIMIT ?
+            `).bind(chRow.id, kind, cursorP, cursorId, videos_limit).all()
+          : await env.DB.prepare(`
+              SELECT id, video_id, title, published_at, video_kind
+              FROM videos
+              WHERE channel_int = ?
+                AND video_kind = ?
+              ORDER BY published_at DESC, id DESC
+              LIMIT ?
+            `).bind(chRow.id, kind, videos_limit).all();
+    } else {
+      vids =
+        (cursorP !== null && cursorId > 0)
+          ? await env.DB.prepare(`
+              SELECT id, video_id, title, published_at, video_kind
+              FROM videos INDEXED BY idx_videos_channel_cover
+              WHERE channel_int = ?
+                AND (published_at, id) < (?, ?)
+              ORDER BY published_at DESC, id DESC
+              LIMIT ?
+            `).bind(chRow.id, cursorP, cursorId, videos_limit).all()
+          : await env.DB.prepare(`
+              SELECT id, video_id, title, published_at, video_kind
+              FROM videos INDEXED BY idx_videos_channel_cover
+              WHERE channel_int = ?
+              ORDER BY published_at DESC, id DESC
+              LIMIT ?
+            `).bind(chRow.id, videos_limit).all();
+    }
 
     const rows = vids.results || [];
 
     out.videos = rows.map(r => ({
       video_id: r.video_id,
       title: r.title,
-      published_at: r.published_at
+      published_at: r.published_at,
+      video_kind: r.video_kind || ""
     }));
 
     const last = rows[rows.length - 1];

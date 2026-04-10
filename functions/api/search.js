@@ -25,10 +25,8 @@ export async function onRequest({ env, request }) {
   const cleaned = cleanQuery(qRaw);
   const match = toFtsMatch(cleaned);
 
-  // תמיד 50
   const limit = 50;
 
-  // cursor: rowid (מספר)
   const cursorRaw = (url.searchParams.get("cursor") || "").trim();
   const cursor = cursorRaw ? parseInt(cursorRaw, 10) : null;
 
@@ -39,7 +37,6 @@ export async function onRequest({ env, request }) {
     );
   }
 
-  // 1) מה-FTS מביאים רק rowid (חסכוני)
   const fts = (Number.isFinite(cursor) && cursor > 0)
     ? await env.DB.prepare(`
         SELECT rowid
@@ -65,10 +62,9 @@ export async function onRequest({ env, request }) {
     );
   }
 
-  // 2) מביאים פרטי וידאו לפי PK (id) — זול
   const placeholders = ids.map(() => "?").join(",");
   const vids = await env.DB.prepare(`
-    SELECT id, video_id, title, published_at
+    SELECT id, video_id, title, published_at, video_kind
     FROM videos
     WHERE id IN (${placeholders})
     ORDER BY id DESC
@@ -78,10 +74,10 @@ export async function onRequest({ env, request }) {
     video_id: v.video_id,
     title: v.title,
     published_at: v.published_at,
-    cursor: String(v.id) // fallback ללקוח (לא חובה, אבל עוזר)
+    video_kind: v.video_kind || "",
+    cursor: String(v.id)
   }));
 
-  // cursor הבא = ה-rowid האחרון שחזר מה-FTS
   const next_cursor = String(ids[ids.length - 1]);
 
   return Response.json(
