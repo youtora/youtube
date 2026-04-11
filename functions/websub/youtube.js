@@ -293,27 +293,31 @@ export async function onRequest({ env, request }) {
     }
 
     const now = nowSec();
-    const videoKinds = await fetchVideoKinds(env, entries.map(e => e.videoId));
+    const videoMeta = await fetchVideoMeta(env, entries.map(e => e.videoId));
     const stmts = [];
 
     for (const e of entries) {
       const title = (e.title || "").slice(0, 200);
-      const videoKind = videoKinds.has(e.videoId) ? videoKinds.get(e.videoId) : null;
+      const meta = videoMeta.get(e.videoId) || {};
+      const videoKind = meta.video_kind ?? null;
+      const durationSec = meta.duration_sec ?? null;
       stmts.push(env.DB.prepare(`
-        INSERT INTO videos(video_id, channel_int, title, published_at, video_kind, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?)
+        INSERT INTO videos(video_id, channel_int, title, published_at, video_kind, duration_sec, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(video_id) DO UPDATE SET
           channel_int   = excluded.channel_int,
           title         = excluded.title,
           published_at  = CASE WHEN excluded.published_at > 0 THEN excluded.published_at ELSE videos.published_at END,
           video_kind    = CASE WHEN excluded.video_kind IS NOT NULL THEN excluded.video_kind ELSE videos.video_kind END,
+          duration_sec  = CASE WHEN excluded.duration_sec IS NOT NULL THEN excluded.duration_sec ELSE videos.duration_sec END,
           updated_at    = excluded.updated_at
         WHERE
           videos.channel_int IS NOT excluded.channel_int
           OR videos.title IS NOT excluded.title
           OR (excluded.published_at > 0 AND videos.published_at != excluded.published_at)
           OR (excluded.video_kind IS NOT NULL AND COALESCE(videos.video_kind, '') != excluded.video_kind)
-      `).bind(e.videoId, channelInt, title, e.published_at ?? 0, videoKind, now));
+          OR (excluded.duration_sec IS NOT NULL AND COALESCE(videos.duration_sec, -1) != excluded.duration_sec)
+      `).bind(e.videoId, channelInt, title, e.published_at ?? 0, videoKind, durationSec, now));
     }
 
     if (stmts.length) await env.DB.batch(stmts);
