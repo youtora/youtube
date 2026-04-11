@@ -133,6 +133,48 @@ a:hover{text-decoration:underline}
 .card:hover{filter:brightness(.995)}
 .cardBody{padding:10px}
 
+.cardThumbLink,
+.cardTitleLink{
+  display:block;
+  color:inherit;
+  text-decoration:none;
+}
+.cardTitleLink:hover{
+  text-decoration:none;
+}
+
+.videoChannelRow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  min-width:0;
+}
+
+.videoChannelAvatar{
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  background:#eee;
+  object-fit:cover;
+  border:1px solid #f0f0f0;
+  flex:0 0 auto;
+}
+
+.videoChannelLink{
+  display:block;
+  min-width:0;
+  font-size:13px;
+  font-weight:700;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.videoChannelLink:hover{
+  color:#111;
+}
+
 /* כותרת כמו יוטיוב: 2 שורות */
 .cardTitle{
   font-weight: 900;

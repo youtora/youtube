@@ -71,18 +71,40 @@ function headerSearch(){
 function renderVideoCard(v){
   const thumb = ytVideoThumb(v.video_id);
   const d = fmtDate(v.published_at);
+  const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
+  const channelName = v.channel_title || v.channel_id || "";
+  const channelThumb = v.channel_thumbnail_url || "";
+
   return `
-    <a class="card" href="/${encodeURIComponent(v.video_id)}" data-link>
-      <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
+    <article class="card">
+      <a class="cardThumbLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+        <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
+      </a>
+
       <div class="cardBody">
-        <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+        <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+          <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+        </a>
+
         <div class="cardMeta">
           ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
-          ${v.channel_title || v.channel_id ? `<span>${esc(v.channel_title || v.channel_id)}</span>` : ``}
           ${d ? `<span>${esc(d)}</span>` : ``}
         </div>
+
+        ${channelName ? `
+          <div class="videoChannelRow">
+            ${channelThumb
+              ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+              : `<div class="videoChannelAvatar"></div>`
+            }
+            ${channelHref
+              ? `<a class="videoChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
+              : `<span class="videoChannelLink">${esc(channelName)}</span>`
+            }
+          </div>
+        ` : ``}
       </div>
-    </a>
+    </article>
   `;
 }
 
@@ -568,7 +590,12 @@ async function pageChannel(channel_id, tab){
     <div class="hr"></div>
 
     <div id="chGrid" class="grid">
-      ${(data.videos || []).map(v => renderVideoCard({ ...v, channel_id: ch.channel_id, channel_title: ch.title })).join("")}
+      ${(data.videos || []).map(v => renderVideoCard({
+        ...v,
+        channel_id: ch.channel_id,
+        channel_title: ch.title,
+        channel_thumbnail_url: ch.thumbnail_url
+      })).join("")}
     </div>
 
     <div id="chSentinel" style="height:1px"></div>
@@ -584,7 +611,7 @@ async function pageChannel(channel_id, tab){
   const hint = document.getElementById("chHint");
   const sentinel = document.getElementById("chSentinel");
 
-  btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title, kind);
+  btn.onclick = () => channelLoadMoreVideos(t, ch.channel_id, ch.title, ch.thumbnail_url, kind);
 
   const hasIO = typeof IntersectionObserver !== "undefined";
   if (!hasIO && !channelVideosState.done) btn.style.display = "inline-flex";
@@ -593,14 +620,14 @@ async function pageChannel(channel_id, tab){
   if (hasIO && !channelVideosState.done) {
     startInfiniteScroll({
       sentinelEl: sentinel,
-      onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title, kind),
+      onNearEnd: () => channelLoadMoreVideos(t, ch.channel_id, ch.title, ch.thumbnail_url, kind),
       enabled: true,
       rootMargin: "200px 0px",
     });
   }
 }
 
-async function channelLoadMoreVideos(token, channel_id, channel_title, kind=""){
+async function channelLoadMoreVideos(token, channel_id, channel_title, channel_thumbnail_url, kind=""){
   if (channelVideosState.loading || channelVideosState.done) return;
   if (channelVideosState.key !== `${channel_id}|${kind}`) return;
 
@@ -626,7 +653,12 @@ async function channelLoadMoreVideos(token, channel_id, channel_title, kind=""){
 
   const vids = data.videos || [];
   if (vids.length) {
-    const html = vids.map(v => renderVideoCard({ ...v, channel_id, channel_title })).join("");
+    const html = vids.map(v => renderVideoCard({
+      ...v,
+      channel_id,
+      channel_title,
+      channel_thumbnail_url
+    })).join("");
     grid.insertAdjacentHTML("beforeend", html);
   }
 
