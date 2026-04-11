@@ -95,28 +95,46 @@ function renderVideoCard(v){
         ${duration ? `<span class="thumbBadge">${esc(duration)}</span>` : ``}
       </a>
 
-      <div class="cardBody">
-        <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
-          <div class="cardTitle">${esc(v.title || v.video_id)}</div>
-        </a>
-
-        <div class="cardMeta">
-          ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
-          ${d ? `<span>${esc(d)}</span>` : ``}
-        </div>
-
+      <div class="cardBody videoCardBody">
         ${channelName ? `
-          <div class="videoChannelRow">
-            ${channelThumb
-              ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
-              : `<div class="videoChannelAvatar"></div>`
-            }
+          <div class="videoCardHead">
             ${channelHref
-              ? `<a class="videoChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
-              : `<span class="videoChannelLink">${esc(channelName)}</span>`
+              ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
+                  ${channelThumb
+                    ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                    : `<span class="videoChannelAvatar videoChannelAvatarFallback"></span>`
+                  }
+                </a>`
+              : `${channelThumb
+                    ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                    : `<span class="videoChannelAvatar videoChannelAvatarFallback"></span>`
+                }`
             }
+            <div class="videoCardText">
+              <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+                <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+              </a>
+
+              ${channelHref
+                ? `<a class="videoChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
+                : `<div class="videoChannelLink">${esc(channelName)}</div>`
+              }
+
+              <div class="cardMeta">
+                ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
+                ${d ? `<span>${esc(d)}</span>` : ``}
+              </div>
+            </div>
           </div>
-        ` : ``}
+        ` : `
+          <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+            <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+          </a>
+          <div class="cardMeta">
+            ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
+            ${d ? `<span>${esc(d)}</span>` : ``}
+          </div>
+        `}
       </div>
     </article>
   `;
