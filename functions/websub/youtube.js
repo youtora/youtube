@@ -88,6 +88,29 @@ async function ytJson(url) {
   return JSON.parse(t);
 }
 
+function classifyVideoItem(it) {
+  if (it?.liveStreamingDetails) return "L";
+
+  const sec = parseIsoDurationSec(it?.contentDetails?.duration || "");
+  if (!(Number.isFinite(sec) && sec > 0 && sec <= 180)) return "";
+
+  const w = Number(it?.player?.embedWidth || 0);
+  const h = Number(it?.player?.embedHeight || 0);
+
+  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > w) {
+    return "S";
+  }
+
+  return "";
+}
+
+async function ytJson(url) {
+  const r = await fetch(url);
+  const t = await r.text();
+  if (!r.ok) throw new Error(`YT ${r.status}: ${t.slice(0, 200)}`);
+  return JSON.parse(t);
+}
+
 async function fetchVideoKinds(env, ids) {
   const out = new Map();
   const uniq = [...new Set((ids || []).filter(Boolean))];
@@ -96,9 +119,11 @@ async function fetchVideoKinds(env, ids) {
   for (let i = 0; i < uniq.length; i += 50) {
     const chunk = uniq.slice(i, i + 50);
     const u = new URL("https://www.googleapis.com/youtube/v3/videos");
-    u.searchParams.set("part", "contentDetails,liveStreamingDetails");
+    u.searchParams.set("part", "contentDetails,liveStreamingDetails,player");
     u.searchParams.set("id", chunk.join(","));
     u.searchParams.set("maxResults", String(chunk.length));
+    u.searchParams.set("maxWidth", "8192");
+    u.searchParams.set("maxHeight", "8192");
     u.searchParams.set("key", env.YT_API_KEY);
 
     const data = await ytJson(u.toString());
@@ -109,7 +134,6 @@ async function fetchVideoKinds(env, ids) {
 
   return out;
 }
-
 async function sha1HmacHex(secret, bodyU8) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
