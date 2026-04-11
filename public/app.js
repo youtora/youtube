@@ -6,6 +6,18 @@ function fmtDate(unix){
   try { return new Date(unix*1000).toLocaleDateString('he-IL', { year:'numeric', month:'2-digit', day:'2-digit' }); }
   catch { return ""; }
 }
+function fmtDuration(sec){
+  const n = Number(sec);
+  if(!Number.isFinite(n) || n <= 0) return "";
+
+  const total = Math.floor(n);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
 function videoKindLabel(kind){
   if(kind === "S") return "שורט";
@@ -71,14 +83,16 @@ function headerSearch(){
 function renderVideoCard(v){
   const thumb = ytVideoThumb(v.video_id);
   const d = fmtDate(v.published_at);
+  const duration = fmtDuration(v.duration_sec);
   const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
   const channelName = v.channel_title || v.channel_id || "";
   const channelThumb = v.channel_thumbnail_url || "";
 
   return `
     <article class="card">
-      <a class="cardThumbLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+      <a class="cardThumbLink thumbWrap" href="/${encodeURIComponent(v.video_id)}" data-link>
         <img class="thumb16x9" loading="lazy" decoding="async" src="${esc(thumb)}">
+        ${duration ? `<span class="thumbBadge">${esc(duration)}</span>` : ``}
       </a>
 
       <div class="cardBody">
@@ -698,7 +712,7 @@ async function pageVideo(video_id){
       <section class="watchMain">
         ${player}
         <div class="h1" style="margin-top:10px">${esc(v.title || v.video_id)}</div>
-        <p class="sub">${fmtDate(v.published_at) ? `פורסם: ${esc(fmtDate(v.published_at))}` : ""}</p>
+        <p class="sub">${[fmtDate(v.published_at) ? `פורסם: ${esc(fmtDate(v.published_at))}` : "", fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : ""].filter(Boolean).join(" · ")}</p>
 
         <div class="hr"></div>
 
@@ -722,10 +736,13 @@ async function pageVideo(video_id){
         <div style="font-weight:900;margin-bottom:8px">סרטונים מוצעים</div>
         ${rec.length ? rec.map(r=>`
           <a class="reco" href="/${encodeURIComponent(r.video_id)}" data-link>
-            <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
+            <span class="recoThumbWrap">
+              <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
+              ${fmtDuration(r.duration_sec) ? `<span class="thumbBadge thumbBadgeSm">${esc(fmtDuration(r.duration_sec))}</span>` : ``}
+            </span>
             <div style="min-width:0">
               <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""}</div>
+              <div class="recoMeta">${[fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : "", fmtDuration(r.duration_sec) ? esc(fmtDuration(r.duration_sec)) : ""].filter(Boolean).join(" · ")}</div>
             </div>
           </a>
         `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}

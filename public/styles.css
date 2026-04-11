@@ -139,6 +139,37 @@ a:hover{text-decoration:underline}
   color:inherit;
   text-decoration:none;
 }
+
+.thumbWrap{
+  position:relative;
+}
+
+.thumbBadge{
+  position:absolute;
+  inset-inline-end:8px;
+  inset-block-end:8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:36px;
+  max-width:calc(100% - 16px);
+  padding:3px 6px;
+  border-radius:8px;
+  background:rgba(0,0,0,.82);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.thumbBadgeSm{
+  font-size:11px;
+  padding:3px 5px;
+  min-width:auto;
+  inset-inline-end:6px;
+  inset-block-end:6px;
+}
 .cardTitleLink:hover{
   text-decoration:none;
 }
