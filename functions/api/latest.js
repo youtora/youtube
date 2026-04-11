@@ -29,34 +29,74 @@ export async function onRequest({ env, request }) {
     rows =
       (cursorP !== null && cursorId !== null)
         ? await env.DB.prepare(`
-            SELECT id, video_id, title, published_at, video_kind
-            FROM videos
-            WHERE video_kind = ?
-              AND (published_at, id) < (?, ?)
-            ORDER BY published_at DESC, id DESC
+            SELECT
+              v.id,
+              v.video_id,
+              v.title,
+              v.published_at,
+              v.video_kind,
+              c.channel_id,
+              c.title AS channel_title,
+              c.thumbnail_url AS channel_thumbnail_url
+            FROM videos AS v INDEXED BY idx_videos_kind_latest_cover
+            JOIN channels AS c
+              ON c.id = v.channel_int
+            WHERE v.video_kind = ?
+              AND (v.published_at, v.id) < (?, ?)
+            ORDER BY v.published_at DESC, v.id DESC
             LIMIT ?
           `).bind(kind, cursorP, cursorId, limit).all()
         : await env.DB.prepare(`
-            SELECT id, video_id, title, published_at, video_kind
-            FROM videos
-            WHERE video_kind = ?
-            ORDER BY published_at DESC, id DESC
+            SELECT
+              v.id,
+              v.video_id,
+              v.title,
+              v.published_at,
+              v.video_kind,
+              c.channel_id,
+              c.title AS channel_title,
+              c.thumbnail_url AS channel_thumbnail_url
+            FROM videos AS v INDEXED BY idx_videos_kind_latest_cover
+            JOIN channels AS c
+              ON c.id = v.channel_int
+            WHERE v.video_kind = ?
+            ORDER BY v.published_at DESC, v.id DESC
             LIMIT ?
           `).bind(kind, limit).all();
   } else {
     rows =
       (cursorP !== null && cursorId !== null)
         ? await env.DB.prepare(`
-            SELECT id, video_id, title, published_at, video_kind
-            FROM videos INDEXED BY idx_videos_latest_cover
-            WHERE (published_at, id) < (?, ?)
-            ORDER BY published_at DESC, id DESC
+            SELECT
+              v.id,
+              v.video_id,
+              v.title,
+              v.published_at,
+              v.video_kind,
+              c.channel_id,
+              c.title AS channel_title,
+              c.thumbnail_url AS channel_thumbnail_url
+            FROM videos AS v INDEXED BY idx_videos_latest_cover
+            JOIN channels AS c
+              ON c.id = v.channel_int
+            WHERE (v.published_at, v.id) < (?, ?)
+            ORDER BY v.published_at DESC, v.id DESC
             LIMIT ?
           `).bind(cursorP, cursorId, limit).all()
         : await env.DB.prepare(`
-            SELECT id, video_id, title, published_at, video_kind
-            FROM videos INDEXED BY idx_videos_latest_cover
-            ORDER BY published_at DESC, id DESC
+            SELECT
+              v.id,
+              v.video_id,
+              v.title,
+              v.published_at,
+              v.video_kind,
+              c.channel_id,
+              c.title AS channel_title,
+              c.thumbnail_url AS channel_thumbnail_url
+            FROM videos AS v INDEXED BY idx_videos_latest_cover
+            JOIN channels AS c
+              ON c.id = v.channel_int
+            ORDER BY v.published_at DESC, v.id DESC
             LIMIT ?
           `).bind(limit).all();
   }
@@ -68,8 +108,9 @@ export async function onRequest({ env, request }) {
     title: r.title,
     published_at: r.published_at,
     video_kind: r.video_kind || "",
-    channel_id: null,
-    channel_title: null,
+    channel_id: r.channel_id || null,
+    channel_title: r.channel_title || null,
+    channel_thumbnail_url: r.channel_thumbnail_url || null,
   }));
 
   let next_cursor = null;

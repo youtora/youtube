@@ -64,10 +64,20 @@ export async function onRequest({ env, request }) {
 
   const placeholders = ids.map(() => "?").join(",");
   const vids = await env.DB.prepare(`
-    SELECT id, video_id, title, published_at, video_kind
-    FROM videos
-    WHERE id IN (${placeholders})
-    ORDER BY id DESC
+    SELECT
+      v.id,
+      v.video_id,
+      v.title,
+      v.published_at,
+      v.video_kind,
+      c.channel_id,
+      c.title AS channel_title,
+      c.thumbnail_url AS channel_thumbnail_url
+    FROM videos AS v
+    JOIN channels AS c
+      ON c.id = v.channel_int
+    WHERE v.id IN (${placeholders})
+    ORDER BY v.id DESC
   `).bind(...ids).all();
 
   const results = (vids.results || []).map(v => ({
@@ -75,6 +85,9 @@ export async function onRequest({ env, request }) {
     title: v.title,
     published_at: v.published_at,
     video_kind: v.video_kind || "",
+    channel_id: v.channel_id || null,
+    channel_title: v.channel_title || null,
+    channel_thumbnail_url: v.channel_thumbnail_url || null,
     cursor: String(v.id)
   }));
 
