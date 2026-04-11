@@ -35,6 +35,7 @@ export async function onRequest({ env, request }) {
               v.title,
               v.published_at,
               v.video_kind,
+              v.duration_sec,
               c.channel_id,
               c.title AS channel_title,
               c.thumbnail_url AS channel_thumbnail_url
@@ -53,6 +54,7 @@ export async function onRequest({ env, request }) {
               v.title,
               v.published_at,
               v.video_kind,
+              v.duration_sec,
               c.channel_id,
               c.title AS channel_title,
               c.thumbnail_url AS channel_thumbnail_url
@@ -73,6 +75,7 @@ export async function onRequest({ env, request }) {
               v.title,
               v.published_at,
               v.video_kind,
+              v.duration_sec,
               c.channel_id,
               c.title AS channel_title,
               c.thumbnail_url AS channel_thumbnail_url
@@ -90,6 +93,7 @@ export async function onRequest({ env, request }) {
               v.title,
               v.published_at,
               v.video_kind,
+              v.duration_sec,
               c.channel_id,
               c.title AS channel_title,
               c.thumbnail_url AS channel_thumbnail_url

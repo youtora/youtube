@@ -10,7 +10,7 @@ export async function onRequest({ env, request }) {
   const recLimit = clamp(parseInt(url.searchParams.get("recommended_limit") || "20", 10), 1, 60);
 
   const vrow = await env.DB.prepare(`
-    SELECT id, video_id, title, published_at, channel_int, video_kind
+    SELECT id, video_id, title, published_at, channel_int, video_kind, duration_sec
     FROM videos
     WHERE video_id = ?
     LIMIT 1
@@ -30,13 +30,14 @@ export async function onRequest({ env, request }) {
     title: vrow.title,
     published_at: vrow.published_at,
     video_kind: vrow.video_kind || "",
+    duration_sec: vrow.duration_sec ?? null,
     channel_id: crow?.channel_id || null,
     channel_title: crow?.channel_title || null,
     thumbnail_url: crow?.thumbnail_url || null,
   };
 
   const rec = await env.DB.prepare(`
-    SELECT video_id, title, published_at, video_kind
+    SELECT video_id, title, published_at, video_kind, duration_sec
     FROM videos INDEXED BY idx_videos_channel_cover
     WHERE channel_int = ?
       AND video_id <> ?

@@ -81,7 +81,7 @@ export async function onRequest({ env, request }) {
       vids =
         (cursorP !== null && cursorId > 0)
           ? await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind
+              SELECT id, video_id, title, published_at, video_kind, duration_sec
               FROM videos
               WHERE channel_int = ?
                 AND video_kind = ?
@@ -90,7 +90,7 @@ export async function onRequest({ env, request }) {
               LIMIT ?
             `).bind(chRow.id, kind, cursorP, cursorId, videos_limit).all()
           : await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind
+              SELECT id, video_id, title, published_at, video_kind, duration_sec
               FROM videos
               WHERE channel_int = ?
                 AND video_kind = ?
@@ -101,7 +101,7 @@ export async function onRequest({ env, request }) {
       vids =
         (cursorP !== null && cursorId > 0)
           ? await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind
+              SELECT id, video_id, title, published_at, video_kind, duration_sec
               FROM videos INDEXED BY idx_videos_channel_cover
               WHERE channel_int = ?
                 AND (published_at, id) < (?, ?)
@@ -109,7 +109,7 @@ export async function onRequest({ env, request }) {
               LIMIT ?
             `).bind(chRow.id, cursorP, cursorId, videos_limit).all()
           : await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind
+              SELECT id, video_id, title, published_at, video_kind, duration_sec
               FROM videos INDEXED BY idx_videos_channel_cover
               WHERE channel_int = ?
               ORDER BY published_at DESC, id DESC
@@ -123,7 +123,8 @@ export async function onRequest({ env, request }) {
       video_id: r.video_id,
       title: r.title,
       published_at: r.published_at,
-      video_kind: r.video_kind || ""
+      video_kind: r.video_kind || "",
+      duration_sec: r.duration_sec ?? null
     }));
 
     const last = rows[rows.length - 1];

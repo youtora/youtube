@@ -70,6 +70,7 @@ export async function onRequest({ env, request }) {
       v.title,
       v.published_at,
       v.video_kind,
+      v.duration_sec,
       c.channel_id,
       c.title AS channel_title,
       c.thumbnail_url AS channel_thumbnail_url
@@ -85,6 +86,7 @@ export async function onRequest({ env, request }) {
     title: v.title,
     published_at: v.published_at,
     video_kind: v.video_kind || "",
+    duration_sec: v.duration_sec ?? null,
     channel_id: v.channel_id || null,
     channel_title: v.channel_title || null,
     channel_thumbnail_url: v.channel_thumbnail_url || null,
