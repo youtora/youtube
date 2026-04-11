@@ -74,19 +74,7 @@ function parseIsoDurationSec(iso) {
   return (((days * 24) + hours) * 60 + mins) * 60 + secs;
 }
 
-function classifyVideoItem(it) {
-  if (it?.liveStreamingDetails) return "L";
-  const sec = parseIsoDurationSec(it?.contentDetails?.duration || "");
-  if (Number.isFinite(sec) && sec > 0 && sec < 180) return "S";
-  return "";
-}
 
-async function ytJson(url) {
-  const r = await fetch(url);
-  const t = await r.text();
-  if (!r.ok) throw new Error(`YT ${r.status}: ${t.slice(0, 200)}`);
-  return JSON.parse(t);
-}
 
 function classifyVideoItem(it) {
   if (it?.liveStreamingDetails) return "L";
