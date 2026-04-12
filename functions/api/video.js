@@ -37,18 +37,39 @@ export async function onRequest({ env, request }) {
   };
 
   const rec = await env.DB.prepare(`
-    SELECT video_id, title, published_at, video_kind, duration_sec
-    FROM videos INDEXED BY idx_videos_channel_cover
-    WHERE channel_int = ?
-      AND video_id <> ?
-    ORDER BY published_at DESC, id DESC
+    SELECT
+      v.video_id,
+      v.title,
+      v.published_at,
+      v.video_kind,
+      v.duration_sec,
+      c.channel_id,
+      c.title AS channel_title,
+      c.thumbnail_url AS channel_thumbnail_url
+    FROM videos AS v INDEXED BY idx_videos_channel_cover
+    JOIN channels AS c
+      ON c.id = v.channel_int
+    WHERE v.channel_int = ?
+      AND v.video_id <> ?
+    ORDER BY v.published_at DESC, v.id DESC
     LIMIT ?
   `).bind(vrow.channel_int, video_id, recLimit).all();
+
+  const recommended = (rec.results || []).map(r => ({
+    video_id: r.video_id,
+    title: r.title,
+    published_at: r.published_at,
+    video_kind: r.video_kind || "",
+    duration_sec: r.duration_sec ?? null,
+    channel_id: r.channel_id || null,
+    channel_title: r.channel_title || null,
+    channel_thumbnail_url: r.channel_thumbnail_url || null,
+  }));
 
   return Response.json(
     {
       video,
-      recommended: rec.results || []
+      recommended
     },
     {
       headers: {
