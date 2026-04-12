@@ -112,11 +112,11 @@ export async function onRequest({ env, request }) {
     title: r.title,
     published_at: r.published_at,
     video_kind: r.video_kind || "",
+    duration_sec: r.duration_sec ?? null,
     channel_id: r.channel_id || null,
     channel_title: r.channel_title || null,
     channel_thumbnail_url: r.channel_thumbnail_url || null,
   }));
-
   let next_cursor = null;
   const last = vrows[vrows.length - 1];
   if (last) {
