@@ -33,8 +33,6 @@ a:hover{text-decoration:underline}
   gap:16px;
   padding:10px 16px;
   background:#fff;
-  box-shadow:none;
-  backdrop-filter:none;
   border-bottom:1px solid #f0f0f0;
 }
 
@@ -50,9 +48,7 @@ a:hover{text-decoration:underline}
 .brand:hover{
   background:transparent;
   text-decoration:none;
-  box-shadow:none;
 }
-
 .brandLogo{
   display:block;
   height:38px;
@@ -87,9 +83,7 @@ a:hover{text-decoration:underline}
   background:#f8f8f8;
   height:40px;
 }
-.search button:hover{
-  background:#f0f0f0;
-}
+.search button:hover{background:#f0f0f0}
 
 .nav{
   display:flex;
@@ -131,8 +125,7 @@ a:hover{text-decoration:underline}
 .sub{margin:0;color:var(--muted);font-size:14px}
 .hr{display:none}
 
-/* ===== GRID CARDS ===== */
-/* כרטיסים רגילים - רוחב יעד קבוע כמו יוטיוב */
+/* ===== GRID ===== */
 .grid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
@@ -157,31 +150,13 @@ a:hover{text-decoration:underline}
   background:transparent;
   box-shadow:none;
 }
-
 .card:hover,
 .shortCard:hover{
   filter:none;
 }
 
-.cardBody{
-  padding:12px 0 0;
-}
-
-.videoCardBody{
-  padding-top:12px;
-}
-
-.videoCardHead{
-  display:flex;
-  align-items:flex-start;
-  gap:12px;
-  min-width:0;
-}
-
-.videoCardText{
-  min-width:0;
-  flex:1 1 auto;
-}
+.cardBody{padding:12px 0 0}
+.videoCardBody{padding-top:12px}
 
 .cardThumbLink,
 .cardTitleLink{
@@ -189,10 +164,7 @@ a:hover{text-decoration:underline}
   color:inherit;
   text-decoration:none;
 }
-
-.cardTitleLink:hover{
-  text-decoration:none;
-}
+.cardTitleLink:hover{text-decoration:none}
 
 .thumbWrap{
   position:relative;
@@ -240,11 +212,8 @@ a:hover{text-decoration:underline}
   padding:3px 5px;
   min-width:auto;
   left:6px;
-  right:auto;
   bottom:6px;
 }
-
-.videoChannelRow{display:none}
 
 .videoChannelAvatarLink,
 .videoChannelAvatar{
@@ -259,31 +228,17 @@ a:hover{text-decoration:underline}
   background:#e9e9e9;
   object-fit:cover;
 }
+.videoChannelAvatarFallback{border:1px solid #ececec}
 
-.videoChannelAvatarFallback{
-  border:1px solid #ececec;
+.metaAvatar{
+  width:28px;
+  height:28px;
 }
 
-.videoChannelLink{
-  display:block;
-  min-width:0;
-  margin-top:4px;
-  font-size:14px;
-  font-weight:400;
-  color:var(--muted);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.videoChannelLink:hover{
-  color:#0f0f0f;
-  text-decoration:none;
-}
-
-/* כותרות וגובה שורות קבוע - כדי שכל הכרטיסים יהיו אחידים */
+/* title full width */
 .cardTitle,
 .shortTitle{
+  width:100%;
   font-size:16px;
   line-height:1.35;
   font-weight:700;
@@ -294,6 +249,43 @@ a:hover{text-decoration:underline}
   overflow:hidden;
   min-height:2.7em;
   max-height:2.7em;
+}
+
+.videoMetaTop{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  min-height:28px;
+}
+
+.videoMetaDate{
+  font-size:13px;
+  line-height:1.3;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.videoChannelLink{
+  display:block;
+  min-width:0;
+  font-size:14px;
+  font-weight:400;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.videoChannelLink:hover{
+  color:#0f0f0f;
+  text-decoration:none;
+}
+
+.videoChannelBelow,
+.shortChannelLink{
+  margin-top:6px;
 }
 
 .cardMeta,
@@ -307,7 +299,6 @@ a:hover{text-decoration:underline}
   color:var(--muted);
   min-height:22px;
 }
-
 .cardMeta > span + span::before{
   content:"•";
   margin:0 6px;
@@ -387,14 +378,11 @@ a:hover{text-decoration:underline}
   gap:16px;
   align-items:start;
 }
-
 .watchMain{min-width:0}
-
 .watchSide{
   border-inline-start:1px solid var(--border);
   padding-inline-start:12px;
 }
-
 .player{
   width:100%;
   aspect-ratio:16/9;
@@ -411,14 +399,12 @@ a:hover{text-decoration:underline}
   padding:8px 0;
   border-bottom:0;
 }
-
 .recoThumbWrap{
   position:relative;
   overflow:hidden;
   border-radius:10px;
   flex:0 0 auto;
 }
-
 .recoThumb{
   width:168px;
   aspect-ratio:16/9;
@@ -427,7 +413,6 @@ a:hover{text-decoration:underline}
   background:#eee;
   flex:0 0 auto;
 }
-
 .recoTitle{
   font-size:14px;
   line-height:1.35;
@@ -438,14 +423,12 @@ a:hover{text-decoration:underline}
   -webkit-line-clamp:2;
   overflow:hidden;
 }
-
 .recoMeta{
   color:var(--muted);
   font-size:12px;
 }
 
 /* ===== SHORTS GRID ===== */
-/* שורטים - רוחב יעד קבוע, לא 6 עמודות קשיחות */
 .shortsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));
@@ -467,7 +450,6 @@ a:hover{text-decoration:underline}
   background:#f2f2f2;
   isolation:isolate;
 }
-
 .shortThumb{
   width:100%;
   aspect-ratio:9/16;
@@ -475,21 +457,11 @@ a:hover{text-decoration:underline}
   display:block;
   background:#eee;
 }
-
-.shortBody{
-  padding-top:12px;
-}
-
-.shortChannelLink{
-  margin-top:6px;
-}
+.shortBody{padding-top:12px}
 
 /* ===== MOBILE ===== */
 @media (max-width:900px){
-  .watchLayout{
-    grid-template-columns:1fr;
-  }
-
+  .watchLayout{grid-template-columns:1fr}
   .watchSide{
     border-inline-start:0;
     padding-inline-start:0;
@@ -501,15 +473,12 @@ a:hover{text-decoration:underline}
 
 @media (max-width:720px){
   .brandLogo{height:32px}
-
   .topbar{
     flex-wrap:wrap;
     gap:8px;
     padding:10px 10px;
   }
-
   .brand{order:1}
-
   .nav{
     order:2;
     width:100%;
@@ -517,46 +486,34 @@ a:hover{text-decoration:underline}
     overflow:auto;
     -webkit-overflow-scrolling:touch;
   }
-
   .nav::-webkit-scrollbar{height:0}
-
   .search{
     order:3;
     width:100%;
     max-width:none;
   }
-
   .shell{
     padding:12px 12px 20px;
     margin:0 auto;
   }
-
   .page{
     border-radius:0;
     border-left:0;
     border-right:0;
     box-shadow:none;
   }
-
   .pad{padding:0}
 }
 
 @media (max-width:600px){
-  .videoChannelAvatar{
-    width:32px;
-    height:32px;
-  }
-
+  .videoChannelAvatar{width:32px;height:32px}
+  .metaAvatar{width:26px;height:26px}
   .cardTitle,
-  .shortTitle{
-    font-size:15px;
-  }
-
+  .shortTitle{font-size:15px}
   .cardMeta,
   .videoChannelLink,
-  .shortMeta{
-    font-size:13px;
-  }
+  .shortMeta,
+  .videoMetaDate{font-size:13px}
 }
 
 @media (max-width:520px){

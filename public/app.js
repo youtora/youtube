@@ -6,6 +6,39 @@ function fmtDate(unix){
   try { return new Date(unix*1000).toLocaleDateString('he-IL', { year:'numeric', month:'2-digit', day:'2-digit' }); }
   catch { return ""; }
 }
+function pad2(n){
+  return String(n).padStart(2, "0");
+}
+function fmtClock(d){
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function fmtDateRel(unix){
+  const n = Number(unix || 0);
+  if(!Number.isFinite(n) || n <= 0) return "";
+
+  const d = new Date(n * 1000);
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.floor((startToday - startTarget) / 86400000);
+
+  if(diffDays === 0) return `היום ב־${fmtClock(d)}`;
+  if(diffDays === 1) return `אתמול ב־${fmtClock(d)}`;
+  if(diffDays === 2) return "לפני יומיים";
+  if(diffDays < 7) return `לפני ${diffDays} ימים`;
+  if(diffDays < 14) return "לפני שבוע";
+  if(diffDays < 30){
+    const weeks = Math.floor(diffDays / 7);
+    return weeks <= 1 ? "לפני שבוע" : `לפני ${weeks} שבועות`;
+  }
+  if(diffDays < 60) return "לפני חודש";
+  if(diffDays < 365){
+    const months = Math.floor(diffDays / 30);
+    return months <= 1 ? "לפני חודש" : `לפני ${months} חודשים`;
+  }
+  if(diffDays < 730) return "לפני שנה";
+  return `לפני ${Math.floor(diffDays / 365)} שנים`;
+}
 function fmtDuration(sec){
   const n = Number(sec);
   if(!Number.isFinite(n) || n <= 0) return "";
@@ -84,10 +117,11 @@ function headerSearch(){
 
 function renderShortCard(v){
   const thumb = ytShortThumb(v.video_id);
-  const d = fmtDate(v.published_at);
+  const relDate = fmtDateRel(v.published_at);
   const duration = fmtDuration(v.duration_sec);
   const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
   const channelName = v.channel_title || v.channel_id || "";
+  const channelThumb = v.channel_thumbnail_url || "";
 
   return `
     <article class="shortCard">
@@ -101,14 +135,26 @@ function renderShortCard(v){
           <div class="shortTitle">${esc(v.title || v.video_id)}</div>
         </a>
 
-        ${channelHref
-          ? `<a class="videoChannelLink shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
-          : `<div class="videoChannelLink shortChannelLink">${esc(channelName)}</div>`
-        }
-
-        <div class="shortMeta">
-          ${d ? `<span>${esc(d)}</span>` : ``}
+        <div class="videoMetaTop">
+          ${channelHref
+            ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
+                ${channelThumb
+                  ? `<img class="videoChannelAvatar metaAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                  : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
+                }
+              </a>`
+            : `${channelThumb
+                  ? `<img class="videoChannelAvatar metaAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                  : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
+              }`
+          }
+          <div class="videoMetaDate">${esc(relDate)}</div>
         </div>
+
+        ${channelHref
+          ? `<a class="videoChannelLink videoChannelBelow shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
+          : `<div class="videoChannelLink videoChannelBelow shortChannelLink">${esc(channelName)}</div>`
+        }
       </div>
     </article>
   `;
@@ -116,7 +162,7 @@ function renderShortCard(v){
 
 function renderVideoCard(v){
   const thumb = ytVideoThumb(v.video_id);
-  const d = fmtDate(v.published_at);
+  const relDate = fmtDateRel(v.published_at);
   const duration = fmtDuration(v.duration_sec);
   const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
   const channelName = v.channel_title || v.channel_id || "";
@@ -130,47 +176,30 @@ function renderVideoCard(v){
       </a>
 
       <div class="cardBody videoCardBody">
-        ${channelName ? `
-          <div class="videoCardHead">
-            ${channelHref
-              ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
-                  ${channelThumb
-                    ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
-                    : `<span class="videoChannelAvatar videoChannelAvatarFallback"></span>`
-                  }
-                </a>`
-              : `${channelThumb
-                    ? `<img class="videoChannelAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
-                    : `<span class="videoChannelAvatar videoChannelAvatarFallback"></span>`
-                }`
-            }
+        <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+          <div class="cardTitle">${esc(v.title || v.video_id)}</div>
+        </a>
 
-            <div class="videoCardText">
-              <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
-                <div class="cardTitle">${esc(v.title || v.video_id)}</div>
-              </a>
+        <div class="videoMetaTop">
+          ${channelHref
+            ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
+                ${channelThumb
+                  ? `<img class="videoChannelAvatar metaAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                  : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
+                }
+              </a>`
+            : `${channelThumb
+                  ? `<img class="videoChannelAvatar metaAvatar" loading="lazy" decoding="async" src="${esc(channelThumb)}" onerror="this.style.display='none'">`
+                  : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
+              }`
+          }
+          <div class="videoMetaDate">${esc(relDate)}</div>
+        </div>
 
-              ${channelHref
-                ? `<a class="videoChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
-                : `<div class="videoChannelLink">${esc(channelName)}</div>`
-              }
-
-              <div class="cardMeta">
-                ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
-                ${d ? `<span>${esc(d)}</span>` : ``}
-              </div>
-            </div>
-          </div>
-        ` : `
-          <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
-            <div class="cardTitle">${esc(v.title || v.video_id)}</div>
-          </a>
-
-          <div class="cardMeta">
-            ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
-            ${d ? `<span>${esc(d)}</span>` : ``}
-          </div>
-        `}
+        ${channelHref
+          ? `<a class="videoChannelLink videoChannelBelow" href="${channelHref}" data-link>${esc(channelName)}</a>`
+          : `<div class="videoChannelLink videoChannelBelow">${esc(channelName)}</div>`
+        }
       </div>
     </article>
   `;
@@ -768,7 +797,7 @@ async function pageVideo(video_id){
       <section class="watchMain">
         ${player}
         <div class="h1" style="margin-top:10px">${esc(v.title || v.video_id)}</div>
-        <p class="sub">${[fmtDate(v.published_at) ? `פורסם: ${esc(fmtDate(v.published_at))}` : "", fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : ""].filter(Boolean).join(" · ")}</p>
+        <p class="sub">${[fmtDateRel(v.published_at) ? `פורסם: ${esc(fmtDateRel(v.published_at))}` : "", fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : ""].filter(Boolean).join(" · ")}</p>
 
         <div class="hr"></div>
 
@@ -798,7 +827,7 @@ async function pageVideo(video_id){
             </span>
             <div style="min-width:0">
               <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${[fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""].filter(Boolean).join(" · ")}</div>
+              <div class="recoMeta">${[fmtDateRel(r.published_at) ? esc(fmtDateRel(r.published_at)) : ""].filter(Boolean).join(" · ")}</div>
             </div>
           </a>
         `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
