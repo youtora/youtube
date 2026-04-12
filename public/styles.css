@@ -597,3 +597,57 @@ a:hover{text-decoration:underline}
   content:"•";
   margin:0 6px;
 }
+
+
+/* ===== SHORTS-ONLY GRID (home shorts + channel shorts) ===== */
+.shortsGrid{
+  display:grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap:16px;
+  row-gap:28px;
+}
+@media (max-width: 1700px){ .shortsGrid{grid-template-columns: repeat(5, minmax(0, 1fr))} }
+@media (max-width: 1400px){ .shortsGrid{grid-template-columns: repeat(4, minmax(0, 1fr))} }
+@media (max-width: 1000px){ .shortsGrid{grid-template-columns: repeat(3, minmax(0, 1fr))} }
+@media (max-width: 700px){ .shortsGrid{grid-template-columns: repeat(2, minmax(0, 1fr))} }
+
+.shortCard{
+  min-width:0;
+}
+.shortThumbWrap{
+  position:relative;
+  display:block;
+  overflow:hidden;
+  border-radius:16px;
+  background:#f2f2f2;
+  isolation:isolate;
+}
+.shortThumb{
+  width:100%;
+  aspect-ratio:9/16;
+  object-fit:cover;
+  display:block;
+  background:#eee;
+}
+.shortBody{
+  padding-top:12px;
+}
+.shortTitle{
+  font-size:16px;
+  line-height:1.35;
+  font-weight:700;
+  margin:0;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  max-height:2.7em;
+}
+.shortChannelLink{
+  margin-top:6px;
+}
+.shortMeta{
+  margin-top:4px;
+  font-size:14px;
+  color:var(--muted);
+}

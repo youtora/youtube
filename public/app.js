@@ -19,6 +19,7 @@ function fmtDuration(sec){
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
+function ytShortThumb(videoId){ return videoId ? `https://i.ytimg.com/vi/${videoId}/oar2.jpg` : ""; }
 function videoKindLabel(kind){
   if(kind === "S") return "שורט";
   if(kind === "L") return "שידור חי";
@@ -78,6 +79,39 @@ function headerSearch(){
     if(!q) return;
     navigate(`/search?q=${encodeURIComponent(q)}`);
   };
+}
+
+
+function renderShortCard(v){
+  const thumb = ytShortThumb(v.video_id);
+  const d = fmtDate(v.published_at);
+  const duration = fmtDuration(v.duration_sec);
+  const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
+  const channelName = v.channel_title || v.channel_id || "";
+
+  return `
+    <article class="shortCard">
+      <a class="shortThumbWrap" href="/${encodeURIComponent(v.video_id)}" data-link>
+        <img class="shortThumb" loading="lazy" decoding="async" src="${esc(thumb)}">
+        ${duration ? `<span class="thumbBadge">${esc(duration)}</span>` : ``}
+      </a>
+
+      <div class="shortBody">
+        <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
+          <div class="shortTitle">${esc(v.title || v.video_id)}</div>
+        </a>
+
+        ${channelHref
+          ? `<a class="videoChannelLink shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
+          : `<div class="videoChannelLink shortChannelLink">${esc(channelName)}</div>`
+        }
+
+        <div class="shortMeta">
+          ${d ? `<span>${esc(d)}</span>` : ``}
+        </div>
+      </div>
+    </article>
+  `;
 }
 
 function renderVideoCard(v){
@@ -197,7 +231,7 @@ async function pageLatest(kind=""){
     <p class="sub">${esc(meta.sub)}</p>
     <div class="hr"></div>
 
-    <div id="latestGrid" class="grid"></div>
+    <div id="latestGrid" class="${kind === "S" ? "shortsGrid" : "grid"}"></div>
 
     <div id="latestSentinel" style="height:1px"></div>
 
@@ -252,7 +286,8 @@ async function latestLoadMore(token){
 
   const vids = data.videos || [];
   if (vids.length) {
-    grid.insertAdjacentHTML("beforeend", vids.map(renderVideoCard).join(""));
+    const renderer = latestState.kind === "S" ? renderShortCard : renderVideoCard;
+    grid.insertAdjacentHTML("beforeend", vids.map(renderer).join(""));
   }
 
   latestState.cursor = data.next_cursor || null;
@@ -623,8 +658,8 @@ async function pageChannel(channel_id, tab){
     ${header}
     <div class="hr"></div>
 
-    <div id="chGrid" class="grid">
-      ${(data.videos || []).map(v => renderVideoCard({
+    <div id="chGrid" class="${kind === "S" ? "shortsGrid" : "grid"}">
+      ${(data.videos || []).map(v => (kind === "S" ? renderShortCard : renderVideoCard)({
         ...v,
         channel_id: ch.channel_id,
         channel_title: ch.title,
@@ -687,7 +722,8 @@ async function channelLoadMoreVideos(token, channel_id, channel_title, channel_t
 
   const vids = data.videos || [];
   if (vids.length) {
-    const html = vids.map(v => renderVideoCard({
+    const renderer = kind === "S" ? renderShortCard : renderVideoCard;
+    const html = vids.map(v => renderer({
       ...v,
       channel_id,
       channel_title,
