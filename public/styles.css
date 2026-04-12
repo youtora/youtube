@@ -231,8 +231,8 @@ a:hover{text-decoration:underline}
 .videoChannelAvatarFallback{border:1px solid #ececec}
 
 .metaAvatar{
-  width:28px;
-  height:28px;
+  width:32px;
+  height:32px;
 }
 
 /* title full width */
@@ -251,12 +251,21 @@ a:hover{text-decoration:underline}
   max-height:2.7em;
 }
 
-.videoMetaTop{
+.videoMetaStackRow{
   display:flex;
-  align-items:center;
-  gap:8px;
+  align-items:flex-start;
+  gap:10px;
   margin-top:8px;
-  min-height:28px;
+  min-height:32px;
+}
+
+.videoMetaStack{
+  min-width:0;
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:2px;
 }
 
 .videoMetaDate{
@@ -285,8 +294,9 @@ a:hover{text-decoration:underline}
 
 .videoChannelBelow,
 .shortChannelLink{
-  margin-top:6px;
+  margin-top:0;
 }
+
 
 .cardMeta,
 .shortMeta{
@@ -507,7 +517,7 @@ a:hover{text-decoration:underline}
 
 @media (max-width:600px){
   .videoChannelAvatar{width:32px;height:32px}
-  .metaAvatar{width:26px;height:26px}
+  .metaAvatar{width:30px;height:30px}
   .cardTitle,
   .shortTitle{font-size:15px}
   .cardMeta,

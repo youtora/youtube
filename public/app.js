@@ -135,7 +135,7 @@ function renderShortCard(v){
           <div class="shortTitle">${esc(v.title || v.video_id)}</div>
         </a>
 
-        <div class="videoMetaTop">
+        <div class="videoMetaStackRow">
           ${channelHref
             ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
                 ${channelThumb
@@ -148,13 +148,15 @@ function renderShortCard(v){
                   : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
               }`
           }
-          <div class="videoMetaDate">${esc(relDate)}</div>
-        </div>
 
-        ${channelHref
-          ? `<a class="videoChannelLink videoChannelBelow shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
-          : `<div class="videoChannelLink videoChannelBelow shortChannelLink">${esc(channelName)}</div>`
-        }
+          <div class="videoMetaStack">
+            <div class="videoMetaDate">${esc(relDate)}</div>
+            ${channelHref
+              ? `<a class="videoChannelLink videoChannelBelow shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
+              : `<div class="videoChannelLink videoChannelBelow shortChannelLink">${esc(channelName)}</div>`
+            }
+          </div>
+        </div>
       </div>
     </article>
   `;
@@ -180,7 +182,7 @@ function renderVideoCard(v){
           <div class="cardTitle">${esc(v.title || v.video_id)}</div>
         </a>
 
-        <div class="videoMetaTop">
+        <div class="videoMetaStackRow">
           ${channelHref
             ? `<a class="videoChannelAvatarLink" href="${channelHref}" data-link>
                 ${channelThumb
@@ -193,13 +195,15 @@ function renderVideoCard(v){
                   : `<span class="videoChannelAvatar videoChannelAvatarFallback metaAvatar"></span>`
               }`
           }
-          <div class="videoMetaDate">${esc(relDate)}</div>
-        </div>
 
-        ${channelHref
-          ? `<a class="videoChannelLink videoChannelBelow" href="${channelHref}" data-link>${esc(channelName)}</a>`
-          : `<div class="videoChannelLink videoChannelBelow">${esc(channelName)}</div>`
-        }
+          <div class="videoMetaStack">
+            <div class="videoMetaDate">${esc(relDate)}</div>
+            ${channelHref
+              ? `<a class="videoChannelLink videoChannelBelow" href="${channelHref}" data-link>${esc(channelName)}</a>`
+              : `<div class="videoChannelLink videoChannelBelow">${esc(channelName)}</div>`
+            }
+          </div>
+        </div>
       </div>
     </article>
   `;
