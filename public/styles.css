@@ -96,17 +96,19 @@ a:hover{text-decoration:underline}
 
 /* ===== MAIN SHELL ===== */
 .shell{
-  max-width: 1820px;
-  margin: 0 auto;
-  padding: 18px 24px 24px;
+  max-width:1820px;
+  margin:0 auto;
+  padding:18px 24px 24px;
 }
+
 .page{
   border:0;
   border-radius:0;
-  background: var(--panel);
+  background:var(--panel);
   box-shadow:none;
   overflow:visible;
 }
+
 .pad{padding:0}
 .muted{color:var(--muted)}
 .h1{margin:0 0 8px; font-size:24px; font-weight:700}
@@ -114,33 +116,52 @@ a:hover{text-decoration:underline}
 .hr{display:none}
 
 /* ===== GRID CARDS ===== */
+/* וידאו רגיל - רוחב יעד קבוע כמו יוטיוב */
 .grid{
   display:grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap:16px;
-  row-gap:28px;
+  grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
+  gap:24px 16px;
+  align-items:start;
 }
-@media (max-width: 1550px){ .grid{grid-template-columns: repeat(4, minmax(0, 1fr))} }
-@media (max-width: 1280px){ .grid{grid-template-columns: repeat(3, minmax(0, 1fr))} }
-@media (max-width: 900px){ .grid{grid-template-columns: repeat(2, minmax(0, 1fr))} }
-@media (max-width: 600px){ .grid{grid-template-columns: 1fr} }
 
-.card{
+@media (max-width:700px){
+  .grid{
+    grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+  }
+}
+
+.card,
+.shortCard{
+  width:100%;
+  min-width:0;
+  align-self:start;
   border:0;
   border-radius:0;
   overflow:visible;
   background:transparent;
-  min-width:0;
+  box-shadow:none;
 }
-.card:hover{filter:none}
-.cardBody{padding:12px 0 0}
-.videoCardBody{padding-top:12px}
+
+.card:hover,
+.shortCard:hover{
+  filter:none;
+}
+
+.cardBody{
+  padding:12px 0 0;
+}
+
+.videoCardBody{
+  padding-top:12px;
+}
+
 .videoCardHead{
   display:flex;
   align-items:flex-start;
   gap:12px;
   min-width:0;
 }
+
 .videoCardText{
   min-width:0;
   flex:1 1 auto;
@@ -150,6 +171,10 @@ a:hover{text-decoration:underline}
 .cardTitleLink{
   display:block;
   color:inherit;
+  text-decoration:none;
+}
+
+.cardTitleLink:hover{
   text-decoration:none;
 }
 
@@ -202,16 +227,15 @@ a:hover{text-decoration:underline}
   right:auto;
   bottom:6px;
 }
-.cardTitleLink:hover{
-  text-decoration:none;
-}
 
 .videoChannelRow{display:none}
+
 .videoChannelAvatarLink,
 .videoChannelAvatar{
   display:block;
   flex:0 0 auto;
 }
+
 .videoChannelAvatar{
   width:36px;
   height:36px;
@@ -219,9 +243,11 @@ a:hover{text-decoration:underline}
   background:#e9e9e9;
   object-fit:cover;
 }
+
 .videoChannelAvatarFallback{
   border:1px solid #ececec;
 }
+
 .videoChannelLink{
   display:block;
   min-width:0;
@@ -233,13 +259,15 @@ a:hover{text-decoration:underline}
   overflow:hidden;
   text-overflow:ellipsis;
 }
+
 .videoChannelLink:hover{
   color:#0f0f0f;
   text-decoration:none;
 }
 
-/* כותרת כמו יוטיוב: 2 שורות */
-.cardTitle{
+/* כותרות בגובה קבוע */
+.cardTitle,
+.shortTitle{
   font-size:16px;
   line-height:1.35;
   font-weight:700;
@@ -248,9 +276,12 @@ a:hover{text-decoration:underline}
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
   overflow:hidden;
+  min-height:2.7em;
   max-height:2.7em;
 }
-.cardMeta{
+
+.cardMeta,
+.shortMeta{
   display:flex;
   align-items:center;
   flex-wrap:wrap;
@@ -258,24 +289,24 @@ a:hover{text-decoration:underline}
   margin-top:4px;
   font-size:14px;
   color:var(--muted);
+  min-height:22px;
 }
+
 .cardMeta > span + span::before{
   content:"•";
   margin:0 6px;
 }
 
-.thumb16x9{
-  width:100%;
-  aspect-ratio: 16/9;
-  object-fit:cover;
-  display:block;
-  background:#eee;
+.avatarRow{
+  display:flex;
+  gap:10px;
+  align-items:center;
 }
 
-.avatarRow{display:flex; gap:10px; align-items:center}
 .avatar{
-  width:44px;height:44px;
-  border-radius: 14px;
+  width:44px;
+  height:44px;
+  border-radius:14px;
   background:#eee;
   object-fit:cover;
   border:1px solid #f0f0f0;
@@ -288,57 +319,80 @@ a:hover{text-decoration:underline}
   gap:8px;
   margin-top:10px;
   overflow:auto;
-  -webkit-overflow-scrolling: touch;
+  -webkit-overflow-scrolling:touch;
   padding-bottom:2px;
 }
+
 .tabs::-webkit-scrollbar{height:0}
+
 .tab{
   border:1px solid var(--border);
-  background: var(--soft);
+  background:var(--soft);
   padding:8px 12px;
-  border-radius: 999px;
-  font-weight: 800;
+  border-radius:999px;
+  font-weight:800;
   font-size:14px;
   flex:0 0 auto;
 }
-.tab.active{background:#111;color:#fff;border-color:#111}
-.tab:hover{text-decoration:none; filter:brightness(.98)}
 
-.btnRow{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+.tab.active{
+  background:#111;
+  color:#fff;
+  border-color:#111;
+}
+
+.tab:hover{
+  text-decoration:none;
+  filter:brightness(.98);
+}
+
+.btnRow{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+
 .btn{
-  display:inline-flex; align-items:center; gap:8px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
   border:1px solid var(--border);
-  background: var(--soft);
+  background:var(--soft);
   padding:8px 12px;
-  border-radius: 999px;
+  border-radius:999px;
   font-weight:700;
 }
-.btn:hover{text-decoration:none; filter:brightness(.98)}
 
-/* ===== WATCH PAGE (RTL כמו יוטיוב) ===== */
+.btn:hover{
+  text-decoration:none;
+  filter:brightness(.98);
+}
+
+/* ===== WATCH PAGE ===== */
 .watchLayout{
   display:grid;
-  grid-template-columns: minmax(0, 1fr) 380px; /* main (ימין) + side (שמאל) */
+  grid-template-columns:minmax(0, 1fr) 380px;
   gap:16px;
   align-items:start;
 }
+
 .watchMain{min-width:0}
+
 .watchSide{
-  border-inline-start: 1px solid var(--border);
-  padding-inline-start: 12px;
+  border-inline-start:1px solid var(--border);
+  padding-inline-start:12px;
 }
 
-/* נגן */
 .player{
   width:100%;
-  aspect-ratio: 16/9;
+  aspect-ratio:16/9;
   border:0;
-  border-radius: 14px;
+  border-radius:14px;
   overflow:hidden;
   background:#000;
 }
 
-/* רשימת מוצעים – קומפקט כמו יוטיוב */
 .reco{
   display:flex;
   gap:10px;
@@ -346,20 +400,23 @@ a:hover{text-decoration:underline}
   padding:8px 0;
   border-bottom:0;
 }
+
 .recoThumbWrap{
   position:relative;
   overflow:hidden;
   border-radius:10px;
   flex:0 0 auto;
 }
+
 .recoThumb{
   width:168px;
-  aspect-ratio: 16/9;
+  aspect-ratio:16/9;
   border-radius:10px;
   object-fit:cover;
   background:#eee;
   flex:0 0 auto;
 }
+
 .recoTitle{
   font-size:14px;
   line-height:1.35;
@@ -370,11 +427,58 @@ a:hover{text-decoration:underline}
   -webkit-line-clamp:2;
   overflow:hidden;
 }
-.recoMeta{color:var(--muted); font-size:12px}
 
-/* ===== MOBILE FIXES (כל האתר) ===== */
-@media (max-width: 900px){
-  .watchLayout{grid-template-columns: 1fr}     /* מוצעים יורדים למטה */
+.recoMeta{
+  color:var(--muted);
+  font-size:12px;
+}
+
+/* ===== SHORTS GRID ===== */
+/* שורטים - רוחב יעד קבוע, כמו יוטיוב */
+.shortsGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));
+  gap:24px 16px;
+  align-items:start;
+}
+
+@media (max-width:700px){
+  .shortsGrid{
+    grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+  }
+}
+
+.shortThumbWrap{
+  position:relative;
+  display:block;
+  overflow:hidden;
+  border-radius:16px;
+  background:#f2f2f2;
+  isolation:isolate;
+}
+
+.shortThumb{
+  width:100%;
+  aspect-ratio:9/16;
+  object-fit:cover;
+  display:block;
+  background:#eee;
+}
+
+.shortBody{
+  padding-top:12px;
+}
+
+.shortChannelLink{
+  margin-top:6px;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width:900px){
+  .watchLayout{
+    grid-template-columns:1fr;
+  }
+
   .watchSide{
     border-inline-start:0;
     padding-inline-start:0;
@@ -384,23 +488,27 @@ a:hover{text-decoration:underline}
   }
 }
 
-/* header במובייל */
-@media (max-width: 720px){
+@media (max-width:720px){
   .brandLogo{height:32px}
+
   .topbar{
     flex-wrap:wrap;
     gap:8px;
     padding:10px 10px;
   }
+
   .brand{order:1}
+
   .nav{
     order:2;
     width:100%;
     flex-wrap:nowrap;
     overflow:auto;
-    -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling:touch;
   }
+
   .nav::-webkit-scrollbar{height:0}
+
   .search{
     order:3;
     width:100%;
@@ -411,243 +519,35 @@ a:hover{text-decoration:underline}
     padding:12px 12px 20px;
     margin:0 auto;
   }
+
   .page{
     border-radius:0;
     border-left:0;
     border-right:0;
     box-shadow:none;
   }
+
   .pad{padding:0}
 }
 
-@media (max-width: 600px){
-  .videoChannelAvatar{width:32px;height:32px}
-  .cardTitle{font-size:15px}
-  .cardMeta,.videoChannelLink{font-size:13px}
+@media (max-width:600px){
+  .videoChannelAvatar{
+    width:32px;
+    height:32px;
+  }
+
+  .cardTitle,
+  .shortTitle{
+    font-size:15px;
+  }
+
+  .cardMeta,
+  .videoChannelLink,
+  .shortMeta{
+    font-size:13px;
+  }
 }
 
-/* מוצעים במובייל – thumb קטן יותר */
-@media (max-width: 520px){
+@media (max-width:520px){
   .recoThumb{width:140px}
-}
-
-.shell{
-  max-width: 1820px;
-  margin: 0 auto;
-  padding: 18px 24px 24px;
-}
-
-.page{
-  border:0;
-  border-radius:0;
-  background: var(--panel);
-  box-shadow:none;
-  overflow:visible;
-}
-
-.pad{
-  padding:0;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap:16px;
-  row-gap:28px;
-}
-
-@media (max-width: 1280px){
-  .grid{grid-template-columns: repeat(3, minmax(0, 1fr))}
-}
-@media (max-width: 900px){
-  .grid{grid-template-columns: repeat(2, minmax(0, 1fr))}
-}
-@media (max-width: 600px){
-  .grid{grid-template-columns: 1fr}
-}
-
-.card{
-  border:0;
-  border-radius:0;
-  overflow:visible;
-  background:transparent;
-  min-width:0;
-  box-shadow:none;
-}
-
-.card:hover{
-  filter:none;
-}
-
-.cardBody{
-  padding:12px 0 0;
-}
-
-.videoCardBody{
-  padding-top:12px;
-}
-
-.videoCardHead{
-  display:flex;
-  align-items:flex-start;
-  gap:12px;
-  min-width:0;
-}
-
-.videoCardText{
-  min-width:0;
-  flex:1 1 auto;
-}
-
-.thumbWrap{
-  position:relative;
-  overflow:hidden;
-  border-radius:12px;
-  background:#f2f2f2;
-  display:block;
-}
-
-.thumbBadge{
-  position:absolute;
-  left:8px;
-  bottom:8px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:36px;
-  max-width:calc(100% - 16px);
-  padding:3px 6px;
-  border-radius:4px;
-  background:rgba(15,15,15,.92);
-  color:#fff;
-  font-size:12px;
-  font-weight:600;
-  line-height:1.2;
-  white-space:nowrap;
-  direction:ltr;
-}
-
-.cardThumbLink,
-.cardTitleLink{
-  display:block;
-  color:inherit;
-  text-decoration:none;
-}
-
-.cardTitleLink:hover{
-  text-decoration:none;
-}
-
-.videoChannelAvatarLink{
-  flex:0 0 auto;
-}
-
-.videoChannelAvatar{
-  width:36px;
-  height:36px;
-  border-radius:999px;
-  background:#e9e9e9;
-  object-fit:cover;
-  display:block;
-}
-
-.videoChannelAvatarFallback{
-  border:1px solid #eee;
-}
-
-.cardTitle{
-  font-size:16px;
-  line-height:1.35;
-  font-weight:700;
-  margin:0;
-  display:-webkit-box;
-  -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
-  overflow:hidden;
-  max-height:2.7em;
-}
-
-.videoChannelLink{
-  display:block;
-  min-width:0;
-  margin-top:4px;
-  font-size:14px;
-  font-weight:400;
-  color:var(--muted);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.videoChannelLink:hover{
-  color:#111;
-}
-
-.cardMeta{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:0;
-  margin-top:4px;
-  font-size:14px;
-  color:var(--muted);
-}
-
-.cardMeta > span + span::before{
-  content:"•";
-  margin:0 6px;
-}
-
-
-/* ===== SHORTS-ONLY GRID (home shorts + channel shorts) ===== */
-.shortsGrid{
-  display:grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  column-gap:16px;
-  row-gap:28px;
-}
-@media (max-width: 1700px){ .shortsGrid{grid-template-columns: repeat(5, minmax(0, 1fr))} }
-@media (max-width: 1400px){ .shortsGrid{grid-template-columns: repeat(4, minmax(0, 1fr))} }
-@media (max-width: 1000px){ .shortsGrid{grid-template-columns: repeat(3, minmax(0, 1fr))} }
-@media (max-width: 700px){ .shortsGrid{grid-template-columns: repeat(2, minmax(0, 1fr))} }
-
-.shortCard{
-  min-width:0;
-}
-.shortThumbWrap{
-  position:relative;
-  display:block;
-  overflow:hidden;
-  border-radius:16px;
-  background:#f2f2f2;
-  isolation:isolate;
-}
-.shortThumb{
-  width:100%;
-  aspect-ratio:9/16;
-  object-fit:cover;
-  display:block;
-  background:#eee;
-}
-.shortBody{
-  padding-top:12px;
-}
-.shortTitle{
-  font-size:16px;
-  line-height:1.35;
-  font-weight:700;
-  margin:0;
-  display:-webkit-box;
-  -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
-  overflow:hidden;
-  max-height:2.7em;
-}
-.shortChannelLink{
-  margin-top:6px;
-}
-.shortMeta{
-  margin-top:4px;
-  font-size:14px;
-  color:var(--muted);
 }
