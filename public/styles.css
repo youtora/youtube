@@ -15,18 +15,22 @@
 img{max-width:100%}
 body{
   margin:0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  font-family:Arial, Helvetica, sans-serif;
+  background:var(--bg);
+  color:var(--text);
 }
 
-a{color:inherit; text-decoration:none}
+a{color:inherit;text-decoration:none}
 a:hover{text-decoration:underline}
 
 /* ===== TOP BAR ===== */
 .topbar{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; gap:16px;
+  position:sticky;
+  top:0;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  gap:16px;
   padding:10px 16px;
   background:#fff;
   box-shadow:none;
@@ -35,7 +39,9 @@ a:hover{text-decoration:underline}
 }
 
 .brand{
-  display:flex; align-items:center; gap:10px;
+  display:flex;
+  align-items:center;
+  gap:10px;
   padding:0;
   border-radius:0;
   white-space:nowrap;
@@ -46,6 +52,7 @@ a:hover{text-decoration:underline}
   text-decoration:none;
   box-shadow:none;
 }
+
 .brandLogo{
   display:block;
   height:38px;
@@ -53,11 +60,12 @@ a:hover{text-decoration:underline}
   max-width:none;
 }
 
-
 .search{
   flex:1;
-  display:flex; gap:0; align-items:center;
-  max-width: 640px;
+  display:flex;
+  gap:0;
+  align-items:center;
+  max-width:640px;
 }
 .search input{
   flex:1;
@@ -79,20 +87,28 @@ a:hover{text-decoration:underline}
   background:#f8f8f8;
   height:40px;
 }
-.search button:hover{background:#f0f0f0}
+.search button:hover{
+  background:#f0f0f0;
+}
 
 .nav{
-  display:flex; gap:6px; align-items:center;
+  display:flex;
+  gap:6px;
+  align-items:center;
   flex-wrap:wrap;
 }
 .navLink{
   padding:8px 12px;
   border-radius:8px;
-  color: var(--muted);
+  color:var(--muted);
   font-size:14px;
   white-space:nowrap;
 }
-.navLink:hover{background:#f2f2f2; text-decoration:none; color:#111}
+.navLink:hover{
+  background:#f2f2f2;
+  text-decoration:none;
+  color:#111;
+}
 
 /* ===== MAIN SHELL ===== */
 .shell{
@@ -111,12 +127,12 @@ a:hover{text-decoration:underline}
 
 .pad{padding:0}
 .muted{color:var(--muted)}
-.h1{margin:0 0 8px; font-size:24px; font-weight:700}
-.sub{margin:0; color:var(--muted); font-size:14px}
+.h1{margin:0 0 8px;font-size:24px;font-weight:700}
+.sub{margin:0;color:var(--muted);font-size:14px}
 .hr{display:none}
 
 /* ===== GRID CARDS ===== */
-/* וידאו רגיל - רוחב יעד קבוע כמו יוטיוב */
+/* כרטיסים רגילים - רוחב יעד קבוע כמו יוטיוב */
 .grid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
@@ -265,7 +281,7 @@ a:hover{text-decoration:underline}
   text-decoration:none;
 }
 
-/* כותרות בגובה קבוע */
+/* כותרות וגובה שורות קבוע - כדי שכל הכרטיסים יהיו אחידים */
 .cardTitle,
 .shortTitle{
   font-size:16px;
@@ -322,7 +338,6 @@ a:hover{text-decoration:underline}
   -webkit-overflow-scrolling:touch;
   padding-bottom:2px;
 }
-
 .tabs::-webkit-scrollbar{height:0}
 
 .tab{
@@ -334,13 +349,11 @@ a:hover{text-decoration:underline}
   font-size:14px;
   flex:0 0 auto;
 }
-
 .tab.active{
   background:#111;
   color:#fff;
   border-color:#111;
 }
-
 .tab:hover{
   text-decoration:none;
   filter:brightness(.98);
@@ -352,7 +365,6 @@ a:hover{text-decoration:underline}
   flex-wrap:wrap;
   margin-top:10px;
 }
-
 .btn{
   display:inline-flex;
   align-items:center;
@@ -363,7 +375,6 @@ a:hover{text-decoration:underline}
   border-radius:999px;
   font-weight:700;
 }
-
 .btn:hover{
   text-decoration:none;
   filter:brightness(.98);
@@ -434,7 +445,7 @@ a:hover{text-decoration:underline}
 }
 
 /* ===== SHORTS GRID ===== */
-/* שורטים - רוחב יעד קבוע, כמו יוטיוב */
+/* שורטים - רוחב יעד קבוע, לא 6 עמודות קשיחות */
 .shortsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));
