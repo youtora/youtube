@@ -529,3 +529,79 @@ a:hover{text-decoration:underline}
 @media (max-width:520px){
   .recoThumb{width:140px}
 }
+
+
+/* ===== RECOMMENDED SIDEBAR: avatar + date + channel ===== */
+.reco{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:8px 0;
+  text-decoration:none;
+}
+
+.recoBody{
+  min-width:0;
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+}
+
+.recoTitle{
+  font-size:14px;
+  line-height:1.35;
+  font-weight:700;
+  margin:0 0 6px;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+}
+
+.recoMetaBlock{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+}
+
+.recoAvatarLink{
+  flex:0 0 auto;
+  display:block;
+  text-decoration:none;
+}
+
+.recoAvatar{
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  background:#e9e9e9;
+  object-fit:cover;
+  display:block;
+}
+
+.recoAvatarFallback{
+  border:1px solid #ececec;
+}
+
+.recoMetaText{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.recoDate,
+.recoChannel{
+  font-size:12px;
+  line-height:1.25;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.recoChannel:hover{
+  color:#0f0f0f;
+  text-decoration:none;
+}

@@ -829,10 +829,24 @@ async function pageVideo(video_id){
               <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
               ${fmtDuration(r.duration_sec) ? `<span class="thumbBadge thumbBadgeSm">${esc(fmtDuration(r.duration_sec))}</span>` : ``}
             </span>
-            <div style="min-width:0">
-              <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${[fmtDateRel(r.published_at) ? esc(fmtDateRel(r.published_at)) : ""].filter(Boolean).join(" · ")}</div>
-            </div>
+            <span class="recoBody">
+              <span class="recoTitle">${esc(r.title || r.video_id)}</span>
+              <span class="recoMetaBlock">
+                ${r.channel_id ? `<a class="recoAvatarLink" href="/${encodeURIComponent(r.channel_id)}/videos" data-link onclick="event.stopPropagation()">` : `<span class="recoAvatarLink">`}
+                  ${r.channel_thumbnail_url
+                    ? `<img class="recoAvatar" loading="lazy" decoding="async" src="${esc(r.channel_thumbnail_url)}" onerror="this.style.display='none'">`
+                    : `<span class="recoAvatar recoAvatarFallback"></span>`
+                  }
+                ${r.channel_id ? `</a>` : `</span>`}
+                <span class="recoMetaText">
+                  <span class="recoDate">${esc(fmtDateRel(r.published_at) || "")}</span>
+                  ${r.channel_id
+                    ? `<a class="recoChannel" href="/${encodeURIComponent(r.channel_id)}/videos" data-link onclick="event.stopPropagation()">${esc(r.channel_title || r.channel_id || "")}</a>`
+                    : `<span class="recoChannel">${esc(r.channel_title || r.channel_id || "")}</span>`
+                  }
+                </span>
+              </span>
+            </span>
           </a>
         `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
       </aside>
