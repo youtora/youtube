@@ -762,7 +762,7 @@ async function pageVideo(video_id){
             </span>
             <div style="min-width:0">
               <div class="recoTitle">${esc(r.title || r.video_id)}</div>
-              <div class="recoMeta">${[fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : "", fmtDuration(r.duration_sec) ? esc(fmtDuration(r.duration_sec)) : ""].filter(Boolean).join(" · ")}</div>
+              <div class="recoMeta">${[fmtDate(r.published_at) ? esc(fmtDate(r.published_at)) : ""].filter(Boolean).join(" · ")}</div>
             </div>
           </a>
         `).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
