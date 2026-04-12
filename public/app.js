@@ -110,6 +110,7 @@ function renderVideoCard(v){
                     : `<span class="videoChannelAvatar videoChannelAvatarFallback"></span>`
                 }`
             }
+
             <div class="videoCardText">
               <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
                 <div class="cardTitle">${esc(v.title || v.video_id)}</div>
@@ -130,6 +131,7 @@ function renderVideoCard(v){
           <a class="cardTitleLink" href="/${encodeURIComponent(v.video_id)}" data-link>
             <div class="cardTitle">${esc(v.title || v.video_id)}</div>
           </a>
+
           <div class="cardMeta">
             ${videoKindLabel(v.video_kind) ? `<span>${esc(videoKindLabel(v.video_kind))}</span>` : ``}
             ${d ? `<span>${esc(d)}</span>` : ``}
