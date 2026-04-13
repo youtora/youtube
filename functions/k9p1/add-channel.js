@@ -1,5 +1,3 @@
-// functions/admin/add-channel.js
-
 function unauthorized() { return new Response("unauthorized", { status: 401 }); }
 function nowSec() { return Math.floor(Date.now() / 1000); }
 function toUnixSeconds(iso) {
@@ -14,11 +12,111 @@ async function ytJson(url) {
   return JSON.parse(t);
 }
 
+function isChannelId(value) {
+  return /^UC[a-zA-Z0-9_-]{22}$/.test(String(value || "").trim());
+}
+
+function tryExtractChannelId(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+
+  const directMatch = text.match(/\bUC[a-zA-Z0-9_-]{22}\b/);
+  if (directMatch) return directMatch[0];
+
+  try {
+    const url = new URL(text);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const channelIndex = parts.findIndex((p) => p.toLowerCase() === "channel");
+
+    if (channelIndex !== -1 && parts[channelIndex + 1] && isChannelId(parts[channelIndex + 1])) {
+      return parts[channelIndex + 1];
+    }
+
+    const qId = url.searchParams.get("channel_id");
+    if (qId && isChannelId(qId)) return qId;
+  } catch {}
+
+  return null;
+}
+
+function normalizeYoutubeUrl(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+
+  if (/^@[-a-zA-Z0-9._]+$/.test(text)) {
+    return `https://www.youtube.com/${text}`;
+  }
+
+  if (/^(youtube\.com|www\.youtube\.com|m\.youtube\.com)\//i.test(text)) {
+    return `https://${text}`;
+  }
+
+  try {
+    const url = new URL(text);
+    const host = url.hostname.toLowerCase();
+
+    if (["youtube.com", "www.youtube.com", "m.youtube.com"].includes(host)) {
+      return url.toString();
+    }
+  } catch {}
+
+  return null;
+}
+
+function extractChannelIdFromHtml(html) {
+  const patterns = [
+    /"externalId":"(UC[a-zA-Z0-9_-]{22})"/,
+    /"channelId":"(UC[a-zA-Z0-9_-]{22})"/,
+    /<meta[^>]+itemprop=["']channelId["'][^>]+content=["'](UC[a-zA-Z0-9_-]{22})["']/i,
+    /<meta[^>]+content=["'](UC[a-zA-Z0-9_-]{22})["'][^>]+itemprop=["']channelId["']/i,
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})\/?["']/i,
+    /<meta[^>]+property=["']og:url["'][^>]+content=["']https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})\/?["']/i,
+  ];
+
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m) return m[1];
+  }
+
+  return null;
+}
+
+async function resolveChannelIdFromInput(rawInput) {
+  const direct = tryExtractChannelId(rawInput);
+  if (direct) {
+    return { channel_id: direct, resolved_via: "direct" };
+  }
+
+  const url = normalizeYoutubeUrl(rawInput);
+  if (!url) {
+    throw new Error("unrecognized channel input");
+  }
+
+  const res = await fetch(url, {
+    method: "GET",
+    redirect: "follow",
+    headers: {
+      "user-agent": "Mozilla/5.0 (compatible; YoutoraBot/1.0)",
+      "accept-language": "en-US,en;q=0.9"
+    }
+  });
+
+  const html = await res.text();
+  if (!res.ok) {
+    throw new Error(`failed to resolve channel url: ${res.status}`);
+  }
+
+  const channel_id = extractChannelIdFromHtml(html);
+  if (!channel_id) {
+    throw new Error("could not extract channel_id from page");
+  }
+
+  return { channel_id, resolved_via: "html" };
+}
+
 /** מוציא VIDEO_ID מתוך URL של ytimg, כדי לשמור רק מזהה */
 function extractVideoIdFromThumbUrl(url) {
   if (!url) return null;
-  // https://i.ytimg.com/vi/VIDEO_ID/mqdefault.jpg
-  // https://i.ytimg.com/vi_webp/VIDEO_ID/...
   const m = url.match(/\/vi(?:_webp)?\/([a-zA-Z0-9_-]{11})\//);
   return m ? m[1] : null;
 }
@@ -70,7 +168,6 @@ async function importPlaylistsForChannel({ env, channel_int, channel_id, max_pag
         ? it.contentDetails.itemCount
         : null;
 
-      // ✅ רק מזהה (לא URL)
       const thumb_video_id = pickPlaylistThumbVideoId(it?.snippet?.thumbnails);
 
       stmts.push(
@@ -99,7 +196,6 @@ async function importPlaylistsForChannel({ env, channel_int, channel_id, max_pag
   return { ok: true, imported };
 }
 
-/** subscribe WebSub בצורה אידמפוטנטית (לא דורס active, ולא שולח שוב אם יש זמן) */
 async function subscribeWebSub({ env, request, channel_id, channel_int }) {
   const t = nowSec();
   const origin = new URL(request.url).origin;
@@ -113,7 +209,7 @@ async function subscribeWebSub({ env, request, channel_id, channel_int }) {
     WHERE topic_url=?
   `).bind(topic).first();
 
-  const MIN_REMAINING = 2 * 24 * 3600; // 2 ימים
+  const MIN_REMAINING = 2 * 24 * 3600;
   if (existing?.status === "active" && Number.isFinite(existing?.lease_expires_at) && existing.lease_expires_at > t + MIN_REMAINING) {
     return { ok: true, skipped: true, reason: "already active", topic, hub_status: null };
   }
@@ -124,7 +220,6 @@ async function subscribeWebSub({ env, request, channel_id, channel_int }) {
   params.set("hub.topic", topic);
   params.set("hub.verify", "async");
 
-  // חשוב: מגן מזיוף של בקשות אימות GET
   if (!env.WEBSUB_VERIFY_TOKEN) {
     const last_error = "missing WEBSUB_VERIFY_TOKEN";
 
@@ -174,16 +269,30 @@ async function subscribeWebSub({ env, request, channel_id, channel_int }) {
 export async function onRequest({ env, request }) {
   if (request.method !== "POST") return new Response("use POST", { status: 200 });
 
-
   const body = await request.json().catch(() => ({}));
-  const channel_id = (body.channel_id || "").trim();
+  const raw_input = String(body.raw_input || "").trim();
+  const requested_channel_id = String(body.channel_id || "").trim();
   const playlists_pages = Math.min(Math.max(parseInt(body.playlists_pages || "10", 10), 1), 30);
 
-  if (!channel_id) return new Response("missing channel_id", { status: 400 });
+  let resolved;
+  try {
+    resolved = await resolveChannelIdFromInput(requested_channel_id || raw_input);
+  } catch (err) {
+    return Response.json({
+      ok: false,
+      error: String(err?.message || err || "failed to resolve channel"),
+      input: requested_channel_id || raw_input || null
+    }, { status: 400 });
+  }
+
+  const channel_id = resolved.channel_id;
+  const resolved_via = resolved.resolved_via;
+
+  if (!channel_id) {
+    return Response.json({ ok: false, error: "missing channel_id" }, { status: 400 });
+  }
 
   const t = nowSec();
-
-  // מושכים title/thumb/uploads לערוץ
   let title = null, thumb = null, uploads = null;
 
   if (env.YT_API_KEY) {
@@ -200,7 +309,6 @@ export async function onRequest({ env, request }) {
     uploads = item?.contentDetails?.relatedPlaylists?.uploads || null;
   }
 
-  // upsert channels
   await env.DB.prepare(`
     INSERT INTO channels(channel_id, title, thumbnail_url, is_active, created_at, updated_at)
     VALUES(?, ?, ?, 1, ?, ?)
@@ -215,7 +323,6 @@ export async function onRequest({ env, request }) {
   if (!ch) return new Response("failed to load channel row", { status: 500 });
   const channel_int = ch.id;
 
-  // backfill state
   await env.DB.prepare(`
     INSERT INTO channel_backfill(channel_int, uploads_playlist_id, next_page_token, done, imported_count, updated_at)
     VALUES(?, ?, NULL, 0, 0, ?)
@@ -224,10 +331,8 @@ export async function onRequest({ env, request }) {
       updated_at = excluded.updated_at
   `).bind(channel_int, uploads, t).run();
 
-  // subscribe
   const websub = await subscribeWebSub({ env, request, channel_id, channel_int });
 
-  // playlists import (רק מזהה לתמונה)
   const playlists = await importPlaylistsForChannel({
     env,
     channel_int,
@@ -237,7 +342,9 @@ export async function onRequest({ env, request }) {
 
   return Response.json({
     ok: true,
+    input: requested_channel_id || raw_input || channel_id,
     channel_id,
+    resolved_via,
     channel_int,
     title,
     uploads_playlist_id: uploads,
