@@ -28,14 +28,13 @@ a:hover{text-decoration:underline}
   position:sticky;
   top:0;
   z-index:10;
-  display:flex;
+  display:grid;
+  grid-template-columns:auto minmax(260px, 640px) 1fr;
   align-items:center;
   gap:16px;
   padding:10px 16px;
-  background:rgba(255,255,255,.96);
-  border-bottom:1px solid #ececec;
-  box-shadow:0 1px 0 rgba(0,0,0,.03);
-  backdrop-filter:saturate(180%) blur(10px);
+  background:#fff;
+  border-bottom:1px solid #f0f0f0;
 }
 
 .brand{
@@ -57,33 +56,40 @@ a:hover{text-decoration:underline}
   width:auto;
   max-width:none;
 }
+.brand{justify-self:end;}
 
 .search{
-  flex:1;
+  width:min(100%, 640px);
   display:flex;
   gap:0;
   align-items:center;
-  max-width:640px;
+  justify-self:center;
 }
 .search input{
   flex:1;
   padding:11px 16px;
   border:1px solid #c6c6c6;
-  border-radius:40px 0 0 40px;
+  border-radius:0 40px 40px 0;
   outline:none;
   font-size:16px;
+  text-align:right;
   background:#fff;
   min-width:160px;
   height:40px;
 }
+.search input:focus{
+  border-color:#1c62d6;
+  box-shadow:inset 0 0 0 1px #1c62d6;
+}
 .search button{
-  padding:0 20px;
+  padding:0 18px;
   border:1px solid #d3d3d3;
-  border-inline-start:0;
-  border-radius:0 40px 40px 0;
+  border-right:0;
+  border-radius:40px 0 0 40px;
   cursor:pointer;
   background:#f8f8f8;
   height:40px;
+  min-width:72px;
 }
 .search button:hover{background:#f0f0f0}
 
@@ -92,6 +98,7 @@ a:hover{text-decoration:underline}
   gap:6px;
   align-items:center;
   flex-wrap:wrap;
+  justify-self:start;
 }
 .navLink{
   padding:8px 12px;
@@ -104,14 +111,6 @@ a:hover{text-decoration:underline}
   background:#f2f2f2;
   text-decoration:none;
   color:#111;
-}
-.navLink.active{
-  background:#0f0f0f;
-  color:#fff;
-}
-.navLink.active:hover{
-  background:#0f0f0f;
-  color:#fff;
 }
 
 /* ===== MAIN SHELL ===== */
@@ -143,10 +142,6 @@ a:hover{text-decoration:underline}
   gap:24px 16px;
   align-items:start;
 }
-.playlistGrid{
-  grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));
-  gap:28px 18px;
-}
 
 @media (max-width:700px){
   .grid,
@@ -169,21 +164,6 @@ a:hover{text-decoration:underline}
 .card:hover,
 .shortCard:hover{
   filter:none;
-}
-.card .thumb16x9,
-.shortCard .shortThumb,
-.playlistCard .playlistThumb{
-  transition:transform .24s ease;
-}
-.card:hover .thumb16x9,
-.shortCard:hover .shortThumb,
-.playlistCard:hover .playlistThumb{
-  transform:scale(1.03);
-}
-.card:hover .cardTitle,
-.shortCard:hover .shortTitle,
-.playlistCard:hover .playlistTitle{
-  color:#111;
 }
 
 .cardBody{padding:12px 0 0}
@@ -336,65 +316,8 @@ a:hover{text-decoration:underline}
 .playlistCard:hover{
   text-decoration:none;
 }
-.playlistVisual{
-  position:relative;
-  display:block;
-  padding-top:10px;
-}
-.playlistVisual::before,
-.playlistVisual::after{
-  content:"";
-  position:absolute;
-  inset:0 14px auto 14px;
-  height:calc(100% - 10px);
-  border-radius:16px;
-  background:#e9e9e9;
-  pointer-events:none;
-}
-.playlistVisual::before{
-  top:0;
-  opacity:.75;
-}
-.playlistVisual::after{
-  top:5px;
-  inset-inline:8px;
-  opacity:.95;
-}
 .playlistThumbWrap{
   display:block;
-  position:relative;
-  z-index:2;
-  border-radius:16px;
-  overflow:hidden;
-}
-.playlistThumb{
-  position:relative;
-  z-index:1;
-}
-.playlistShade{
-  position:absolute;
-  inset:0;
-  z-index:2;
-  background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.02) 44%, rgba(0,0,0,.38) 100%);
-  pointer-events:none;
-}
-.playlistTypeBadge{
-  position:absolute;
-  top:10px;
-  right:10px;
-  z-index:4;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-height:26px;
-  padding:4px 9px;
-  border-radius:999px;
-  background:rgba(15,15,15,.86);
-  color:#fff;
-  font-size:12px;
-  font-weight:800;
-  line-height:1;
-  pointer-events:none;
 }
 .playlistCountBadge{
   position:absolute;
@@ -413,21 +336,41 @@ a:hover{text-decoration:underline}
   line-height:1.2;
   pointer-events:none;
 }
+.playlistOverlay{
+  position:absolute;
+  inset:auto 10px 10px auto;
+  z-index:3;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+  padding:5px 10px;
+  border-radius:8px;
+  background:rgba(255,255,255,.92);
+  color:#0f0f0f;
+  font-size:12px;
+  font-weight:800;
+  box-shadow:0 1px 4px rgba(0,0,0,.08);
+  pointer-events:none;
+}
+.playlistOverlayLabel{
+  white-space:nowrap;
+}
 .playlistBody{
   display:flex;
   flex-direction:column;
   gap:4px;
-  padding-top:14px;
+  padding-top:12px;
 }
 .playlistTitle{
   font-size:16px;
-  line-height:1.4;
+  line-height:1.35;
   font-weight:700;
   display:-webkit-box;
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
   overflow:hidden;
-  min-height:2.8em;
+  min-height:2.7em;
 }
 .playlistChannel{
   font-size:14px;
@@ -435,13 +378,6 @@ a:hover{text-decoration:underline}
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-}
-.playlistMetaLink{
-  font-size:13px;
-  color:var(--muted);
-}
-.playlistCard:hover .playlistMetaLink{
-  color:#111;
 }
 
 .channelsGrid{
@@ -455,26 +391,24 @@ a:hover{text-decoration:underline}
   align-items:center;
   gap:12px;
   padding:18px 14px;
-  border:1px solid #ededed;
+  border:1px solid var(--border);
   border-radius:18px;
   background:#fff;
   text-align:center;
   text-decoration:none;
-  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-  box-shadow:0 1px 2px rgba(0,0,0,.03);
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
 }
 .channelCard:hover{
   text-decoration:none;
   transform:translateY(-2px);
-  box-shadow:0 10px 28px rgba(0,0,0,.08);
-  border-color:#e3e3e3;
+  box-shadow:0 8px 24px rgba(0,0,0,.06);
+  border-color:#d9d9d9;
 }
 .channelCardMedia{
   display:flex;
   align-items:center;
   justify-content:center;
   width:100%;
-  min-height:104px;
 }
 .channelCardAvatar{
   width:92px;
@@ -591,7 +525,7 @@ a:hover{text-decoration:underline}
 /* ===== WATCH PAGE ===== */
 .watchLayout{
   display:grid;
-  grid-template-columns:minmax(0, 1fr) 380px;
+  grid-template-columns:minmax(0, 1fr) 400px;
   gap:16px;
   align-items:start;
 }
@@ -691,13 +625,16 @@ a:hover{text-decoration:underline}
 @media (max-width:720px){
   .brandLogo{height:32px}
   .topbar{
-    flex-wrap:wrap;
+    grid-template-columns:1fr;
     gap:8px;
     padding:10px 10px;
   }
-  .brand{order:1}
+  .brand,
+  .search,
   .nav{
-    order:2;
+    justify-self:stretch;
+  }
+  .nav{
     width:100%;
     flex-wrap:nowrap;
     overflow:auto;
@@ -705,7 +642,6 @@ a:hover{text-decoration:underline}
   }
   .nav::-webkit-scrollbar{height:0}
   .search{
-    order:3;
     width:100%;
     max-width:none;
   }
@@ -734,30 +670,54 @@ a:hover{text-decoration:underline}
 }
 
 @media (max-width:520px){
+  .recoCard{grid-template-columns:140px minmax(0, 1fr);}
   .recoThumb{width:140px}
 }
 
 
-/* ===== RECOMMENDED SIDEBAR: avatar + date + channel ===== */
-.reco{
-  display:flex;
+/* ===== RECOMMENDED SIDEBAR ===== */
+.recoCard{
+  display:grid;
+  grid-template-columns:168px minmax(0, 1fr);
   gap:12px;
-  align-items:flex-start;
+  align-items:start;
   padding:8px 0;
+}
+
+.recoThumbLink,
+.recoTitleLink{
+  display:block;
+  color:inherit;
   text-decoration:none;
+}
+
+.recoThumbWrap{
+  position:relative;
+  overflow:hidden;
+  border-radius:10px;
+  display:block;
+}
+
+.recoThumb{
+  width:168px;
+  aspect-ratio:16/9;
+  border-radius:10px;
+  object-fit:cover;
+  background:#eee;
+  display:block;
 }
 
 .recoBody{
   min-width:0;
-  flex:1 1 auto;
   display:flex;
   flex-direction:column;
-  gap:6px;
+  align-items:flex-start;
+  gap:8px;
 }
 
 .recoTitle{
   font-size:14px;
-  line-height:1.35;
+  line-height:1.38;
   font-weight:700;
   margin:0;
   display:-webkit-box;
@@ -766,17 +726,17 @@ a:hover{text-decoration:underline}
   overflow:hidden;
 }
 
-.recoMetaBlock{
+.recoMetaRow{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   gap:8px;
   min-width:0;
 }
 
-.recoAvatarLink{
+.recoAvatarLink,
+.recoAvatar{
   flex:0 0 auto;
   display:block;
-  text-decoration:none;
 }
 
 .recoAvatar{
@@ -785,7 +745,6 @@ a:hover{text-decoration:underline}
   border-radius:999px;
   background:#e9e9e9;
   object-fit:cover;
-  display:block;
 }
 
 .recoAvatarFallback{
@@ -799,8 +758,9 @@ a:hover{text-decoration:underline}
   gap:2px;
 }
 
-.recoDate,
-.recoChannel{
+.recoChannel,
+.recoDate{
+  display:block;
   font-size:12px;
   line-height:1.25;
   color:var(--muted);
