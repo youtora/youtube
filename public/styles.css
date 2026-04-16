@@ -126,7 +126,8 @@ a:hover{text-decoration:underline}
 .hr{display:none}
 
 /* ===== GRID ===== */
-.grid{
+.grid,
+.playlistGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
   gap:24px 16px;
@@ -134,7 +135,8 @@ a:hover{text-decoration:underline}
 }
 
 @media (max-width:700px){
-  .grid{
+  .grid,
+  .playlistGrid{
     grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
   }
 }
@@ -295,6 +297,136 @@ a:hover{text-decoration:underline}
 .videoChannelBelow,
 .shortChannelLink{
   margin-top:0;
+}
+
+.playlistCard{
+  display:block;
+  color:inherit;
+  text-decoration:none;
+}
+.playlistCard:hover{
+  text-decoration:none;
+}
+.playlistThumbWrap{
+  display:block;
+}
+.playlistCountBadge{
+  position:absolute;
+  left:10px;
+  bottom:10px;
+  z-index:4;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:5px 8px;
+  border-radius:8px;
+  background:rgba(15,15,15,.92);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.2;
+  pointer-events:none;
+}
+.playlistOverlay{
+  position:absolute;
+  inset:auto 10px 10px auto;
+  z-index:3;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+  padding:5px 10px;
+  border-radius:8px;
+  background:rgba(255,255,255,.92);
+  color:#0f0f0f;
+  font-size:12px;
+  font-weight:800;
+  box-shadow:0 1px 4px rgba(0,0,0,.08);
+  pointer-events:none;
+}
+.playlistOverlayLabel{
+  white-space:nowrap;
+}
+.playlistBody{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding-top:12px;
+}
+.playlistTitle{
+  font-size:16px;
+  line-height:1.35;
+  font-weight:700;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  min-height:2.7em;
+}
+.playlistChannel{
+  font-size:14px;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.channelsGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));
+  gap:24px 18px;
+}
+.channelCard{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+  padding:18px 14px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:#fff;
+  text-align:center;
+  text-decoration:none;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.channelCard:hover{
+  text-decoration:none;
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,.06);
+  border-color:#d9d9d9;
+}
+.channelCardMedia{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+}
+.channelCardAvatar{
+  width:92px;
+  height:92px;
+  border-radius:999px;
+  object-fit:cover;
+  background:#ededed;
+  border:1px solid #ececec;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:30px;
+  font-weight:800;
+  color:#555;
+}
+.channelCardAvatarFallback{
+  background:#f4f4f4;
+}
+.channelCardTitle{
+  font-size:15px;
+  line-height:1.35;
+  font-weight:700;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  min-height:2.7em;
 }
 
 
@@ -534,7 +666,7 @@ a:hover{text-decoration:underline}
 /* ===== RECOMMENDED SIDEBAR: avatar + date + channel ===== */
 .reco{
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:flex-start;
   padding:8px 0;
   text-decoration:none;
@@ -545,13 +677,14 @@ a:hover{text-decoration:underline}
   flex:1 1 auto;
   display:flex;
   flex-direction:column;
+  gap:6px;
 }
 
 .recoTitle{
   font-size:14px;
   line-height:1.35;
   font-weight:700;
-  margin:0 0 6px;
+  margin:0;
   display:-webkit-box;
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
@@ -604,4 +737,25 @@ a:hover{text-decoration:underline}
 .recoChannel:hover{
   color:#0f0f0f;
   text-decoration:none;
+}
+
+@media (max-width:760px){
+  .channelsGrid{
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    gap:18px 12px;
+  }
+  .channelCard{
+    padding:16px 10px;
+  }
+  .channelCardAvatar{
+    width:76px;
+    height:76px;
+    font-size:24px;
+  }
+}
+
+@media (max-width:520px){
+  .playlistGrid{
+    grid-template-columns:1fr;
+  }
 }

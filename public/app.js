@@ -351,6 +351,20 @@ async function pageLive(){
 }
 
 /* ---------- PAGES: channels list ---------- */
+function renderChannelCard(ch){
+  return `
+    <a class="channelCard" href="/${encodeURIComponent(ch.channel_id)}/videos" data-link>
+      <span class="channelCardMedia">
+        ${ch.thumbnail_url
+          ? `<img class="channelCardAvatar" loading="lazy" decoding="async" src="${esc(ch.thumbnail_url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+          : ``}
+        <span class="channelCardAvatar channelCardAvatarFallback"${ch.thumbnail_url ? ` style="display:none"` : ``}>${esc((ch.title || ch.channel_id || "").trim().charAt(0) || "?")}</span>
+      </span>
+      <span class="channelCardTitle">${esc(ch.title || ch.channel_id)}</span>
+    </a>
+  `;
+}
+
 async function pageChannels(){
   stopActiveObserver();
 
@@ -364,19 +378,8 @@ async function pageChannels(){
     <div class="hr"></div>
 
     ${channels.length ? `
-      <div class="grid">
-        ${channels.map(ch=>`
-          <a class="card" href="/${encodeURIComponent(ch.channel_id)}/videos" data-link>
-            <div class="cardBody avatarRow">
-              ${ch.thumbnail_url ? `<img class="avatar" loading="lazy" decoding="async" src="${esc(ch.thumbnail_url)}" onerror="this.style.display='none'">`
-                                 : `<div class="avatar"></div>`}
-              <div style="min-width:0">
-                <div class="cardTitle" style="margin:0">${esc(ch.title || ch.channel_id)}</div>
-                <div class="cardMeta">${esc(ch.channel_id)}</div>
-              </div>
-            </div>
-          </a>
-        `).join("")}
+      <div class="channelsGrid">
+        ${channels.map(renderChannelCard).join("")}
       </div>
     ` : `<div class="muted">אין ערוצים עדיין.</div>`}
   `);
@@ -386,18 +389,22 @@ async function pageChannels(){
 let playlistsState = { cursor: null, loading: false, done: false, token: 0 };
 
 function renderPlaylistCard(p){
+  const countText = p.item_count != null ? `${p.item_count} סרטונים` : "פלייליסט";
   return `
-    <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-      <img class="thumb16x9" loading="lazy" decoding="async"
-           src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-           onerror="this.style.display='none'">
-      <div class="cardBody">
-        <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
-        <div class="cardMeta">
-          <span>${esc(p.channel_title || p.channel_id)}</span>
-          ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
-        </div>
-      </div>
+    <a class="playlistCard" href="/${encodeURIComponent(p.playlist_id)}" data-link>
+      <span class="playlistThumbWrap thumbWrap">
+        <img class="thumb16x9" loading="lazy" decoding="async"
+             src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
+             onerror="this.style.display='none'">
+        <span class="playlistCountBadge">${esc(countText)}</span>
+        <span class="playlistOverlay">
+          <span class="playlistOverlayLabel">פלייליסט</span>
+        </span>
+      </span>
+      <span class="playlistBody">
+        <span class="playlistTitle">${esc(p.title || p.playlist_id)}</span>
+        <span class="playlistChannel">${esc(p.channel_title || p.channel_id || "")}</span>
+      </span>
     </a>
   `;
 }
@@ -413,7 +420,7 @@ async function pagePlaylists(){
     <p class="sub">רשימת פלייליסטים מכל הערוצים</p>
     <div class="hr"></div>
 
-    <div id="plGrid" class="grid"></div>
+    <div id="plGrid" class="playlistGrid"></div>
 
     <div id="plSentinel" style="height:1px"></div>
 
@@ -658,20 +665,8 @@ async function pageChannel(channel_id, tab){
       ${header}
       <div class="hr"></div>
       ${playlists.length ? `
-        <div class="grid">
-          ${playlists.map(p=>`
-            <a class="card" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-              <img class="thumb16x9" loading="lazy" decoding="async"
-                   src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-                   onerror="this.style.display='none'">
-              <div class="cardBody">
-                <div class="cardTitle">${esc(p.title || p.playlist_id)}</div>
-                <div class="cardMeta">
-                  ${p.item_count!=null ? `<span>${p.item_count} סרטונים</span>` : ``}
-                </div>
-              </div>
-            </a>
-          `).join("")}
+        <div class="playlistGrid">
+          ${playlists.map(renderPlaylistCard).join("")}
         </div>
       ` : `<div class="muted">אין פלייליסטים (או עדיין לא נטענו).</div>`}
     `);
