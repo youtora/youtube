@@ -102,6 +102,21 @@ function showErr(err){
   setPage(`<div class="h1">שגיאה</div><p class="sub">${esc(err?.message || String(err))}</p>`);
 }
 
+function setActiveNav(){
+  const path = location.pathname.replace(/\/+$/,"") || "/";
+  const links = document.querySelectorAll('.nav .navLink[data-link]');
+
+  links.forEach((link)=>{
+    const href = (link.getAttribute('href') || '').replace(/\/+$/, '') || '/';
+    let active = false;
+
+    if (href === '/') active = path === '/';
+    else active = path === href || path.startsWith(href + '/');
+
+    link.classList.toggle('active', active);
+  });
+}
+
 function headerSearch(){
   const form = $("searchForm");
   const input = $("searchInput");
@@ -385,73 +400,32 @@ async function pageChannels(){
   `);
 }
 
-
-function renderRecoCard(r){
-  const channelHref = r.channel_id ? `/${encodeURIComponent(r.channel_id)}/videos` : "";
-  const channelName = r.channel_title || r.channel_id || "";
-  const relDate = fmtDateRel(r.published_at) || "";
-  const duration = fmtDuration(r.duration_sec);
-
-  return `
-    <article class="recoCard">
-      <a class="recoThumbLink" href="/${encodeURIComponent(r.video_id)}" data-link>
-        <span class="recoThumbWrap">
-          <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
-          ${duration ? `<span class="thumbBadge thumbBadgeSm">${esc(duration)}</span>` : ``}
-        </span>
-      </a>
-
-      <div class="recoBody">
-        <a class="recoTitleLink" href="/${encodeURIComponent(r.video_id)}" data-link>
-          <span class="recoTitle">${esc(r.title || r.video_id)}</span>
-        </a>
-
-        <div class="recoMetaRow">
-          ${channelHref
-            ? `<a class="recoAvatarLink" href="${channelHref}" data-link>
-                ${r.channel_thumbnail_url
-                  ? `<img class="recoAvatar" loading="lazy" decoding="async" src="${esc(r.channel_thumbnail_url)}" onerror="this.style.display='none'">`
-                  : `<span class="recoAvatar recoAvatarFallback"></span>`
-                }
-              </a>`
-            : `${r.channel_thumbnail_url
-                  ? `<img class="recoAvatar" loading="lazy" decoding="async" src="${esc(r.channel_thumbnail_url)}" onerror="this.style.display='none'">`
-                  : `<span class="recoAvatar recoAvatarFallback"></span>`
-                }`
-          }
-
-          <div class="recoMetaText">
-            ${channelHref
-              ? `<a class="recoChannel" href="${channelHref}" data-link>${esc(channelName)}</a>`
-              : `<span class="recoChannel">${esc(channelName)}</span>`
-            }
-            ${relDate ? `<span class="recoDate">${esc(relDate)}</span>` : ``}
-          </div>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
 /* ---------- PAGES: playlists list ---------- */
 let playlistsState = { cursor: null, loading: false, done: false, token: 0 };
 
 function renderPlaylistCard(p){
-  const countText = p.item_count != null ? `${p.item_count} סרטונים` : "פלייליסט";
+  const count = Number(p.item_count);
+  const countText = Number.isFinite(count) && count > 0 ? `${count} סרטונים` : "פלייליסט";
+  const channelName = p.channel_title || p.channel_id || "";
+  const thumb = p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "";
+
   return `
     <a class="playlistCard" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-      <span class="playlistThumbWrap thumbWrap">
-        <img class="thumb16x9" loading="lazy" decoding="async"
-             src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-             onerror="this.style.display='none'">
-        <span class="playlistCountBadge">${esc(countText)}</span>
-        <span class="playlistOverlay">
-          <span class="playlistOverlayLabel">פלייליסט</span>
+      <span class="playlistVisual">
+        <span class="playlistThumbWrap thumbWrap">
+          <img class="thumb16x9 playlistThumb" loading="lazy" decoding="async"
+               src="${esc(thumb)}"
+               onerror="this.style.display='none'">
+          <span class="playlistShade"></span>
+          <span class="playlistTypeBadge">פלייליסט</span>
+          <span class="playlistCountBadge">${esc(countText)}</span>
         </span>
       </span>
+
       <span class="playlistBody">
         <span class="playlistTitle">${esc(p.title || p.playlist_id)}</span>
-        <span class="playlistChannel">${esc(p.channel_title || p.channel_id || "")}</span>
+        <span class="playlistChannel">${esc(channelName)}</span>
+        <span class="playlistMetaLink">עודכן לצפייה</span>
       </span>
     </a>
   `;
@@ -855,7 +829,7 @@ async function pageVideo(video_id){
             <div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               <a href="/${encodeURIComponent(v.channel_id)}/videos" data-link>${esc(v.channel_title || v.channel_id)}</a>
             </div>
-            <div class="muted" style="font-size:12px">${esc(v.channel_id)}</div>
+            <div class="muted" style="font-size:12px">ערוץ</div>
           </div>
 
           <div style="margin-inline-start:auto" class="btnRow">
@@ -865,8 +839,43 @@ async function pageVideo(video_id){
       </section>
 
       <aside class="watchSide">
-        <div style="font-weight:900;margin-bottom:8px">סרטונים מוצעים</div>
-        ${rec.length ? rec.map(renderRecoCard).join("") : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
+        <div class="watchSideTitle">סרטונים מוצעים</div>
+        ${rec.length ? `<div class="recoList">${rec.map(r=>`
+          <article class="recoCard">
+            <a class="recoThumbLink" href="/${encodeURIComponent(r.video_id)}" data-link>
+              <span class="recoThumbWrap">
+                <img class="recoThumb" loading="lazy" decoding="async" src="${esc(ytVideoThumb(r.video_id))}">
+                ${fmtDuration(r.duration_sec) ? `<span class="thumbBadge thumbBadgeSm">${esc(fmtDuration(r.duration_sec))}</span>` : ``}
+              </span>
+            </a>
+
+            <div class="recoBody">
+              <a class="recoTitleLink" href="/${encodeURIComponent(r.video_id)}" data-link>
+                <span class="recoTitle">${esc(r.title || r.video_id)}</span>
+              </a>
+
+              <span class="recoMetaBlock">
+                ${r.channel_id
+                  ? `<a class="recoAvatarLink" href="/${encodeURIComponent(r.channel_id)}/videos" data-link>`
+                  : `<span class="recoAvatarLink">`
+                }
+                  ${r.channel_thumbnail_url
+                    ? `<img class="recoAvatar" loading="lazy" decoding="async" src="${esc(r.channel_thumbnail_url)}" onerror="this.style.display='none'">`
+                    : `<span class="recoAvatar recoAvatarFallback"></span>`
+                  }
+                ${r.channel_id ? `</a>` : `</span>`}
+
+                <span class="recoMetaText">
+                  <span class="recoDate">${esc(fmtDateRel(r.published_at) || "")}</span>
+                  ${r.channel_id
+                    ? `<a class="recoChannel" href="/${encodeURIComponent(r.channel_id)}/videos" data-link>${esc(r.channel_title || r.channel_id || "")}</a>`
+                    : `<span class="recoChannel">${esc(r.channel_title || r.channel_id || "")}</span>`
+                  }
+                </span>
+              </span>
+            </div>
+          </article>
+        `).join("")}</div>` : `<div class="muted">אין כרגע המלצות מהמסד.</div>`}
       </aside>
     </div>
   `);
@@ -910,6 +919,7 @@ async function pagePlaylist(playlist_id){
 /* ---------- ROUTER ---------- */
 async function render(){
   const { parts, qs } = route();
+  setActiveNav();
 
   if(parts.length === 0) return pageHome();
   if(parts[0] === "shorts") return pageShorts();
