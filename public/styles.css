@@ -32,8 +32,10 @@ a:hover{text-decoration:underline}
   align-items:center;
   gap:16px;
   padding:10px 16px;
-  background:#fff;
-  border-bottom:1px solid #f0f0f0;
+  background:rgba(255,255,255,.96);
+  border-bottom:1px solid #ececec;
+  box-shadow:0 1px 0 rgba(0,0,0,.03);
+  backdrop-filter:saturate(180%) blur(10px);
 }
 
 .brand{
@@ -103,6 +105,14 @@ a:hover{text-decoration:underline}
   text-decoration:none;
   color:#111;
 }
+.navLink.active{
+  background:#0f0f0f;
+  color:#fff;
+}
+.navLink.active:hover{
+  background:#0f0f0f;
+  color:#fff;
+}
 
 /* ===== MAIN SHELL ===== */
 .shell{
@@ -133,6 +143,10 @@ a:hover{text-decoration:underline}
   gap:24px 16px;
   align-items:start;
 }
+.playlistGrid{
+  grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));
+  gap:28px 18px;
+}
 
 @media (max-width:700px){
   .grid,
@@ -155,6 +169,21 @@ a:hover{text-decoration:underline}
 .card:hover,
 .shortCard:hover{
   filter:none;
+}
+.card .thumb16x9,
+.shortCard .shortThumb,
+.playlistCard .playlistThumb{
+  transition:transform .24s ease;
+}
+.card:hover .thumb16x9,
+.shortCard:hover .shortThumb,
+.playlistCard:hover .playlistThumb{
+  transform:scale(1.03);
+}
+.card:hover .cardTitle,
+.shortCard:hover .shortTitle,
+.playlistCard:hover .playlistTitle{
+  color:#111;
 }
 
 .cardBody{padding:12px 0 0}
@@ -307,8 +336,65 @@ a:hover{text-decoration:underline}
 .playlistCard:hover{
   text-decoration:none;
 }
+.playlistVisual{
+  position:relative;
+  display:block;
+  padding-top:10px;
+}
+.playlistVisual::before,
+.playlistVisual::after{
+  content:"";
+  position:absolute;
+  inset:0 14px auto 14px;
+  height:calc(100% - 10px);
+  border-radius:16px;
+  background:#e9e9e9;
+  pointer-events:none;
+}
+.playlistVisual::before{
+  top:0;
+  opacity:.75;
+}
+.playlistVisual::after{
+  top:5px;
+  inset-inline:8px;
+  opacity:.95;
+}
 .playlistThumbWrap{
   display:block;
+  position:relative;
+  z-index:2;
+  border-radius:16px;
+  overflow:hidden;
+}
+.playlistThumb{
+  position:relative;
+  z-index:1;
+}
+.playlistShade{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.02) 44%, rgba(0,0,0,.38) 100%);
+  pointer-events:none;
+}
+.playlistTypeBadge{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:4;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:26px;
+  padding:4px 9px;
+  border-radius:999px;
+  background:rgba(15,15,15,.86);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  line-height:1;
+  pointer-events:none;
 }
 .playlistCountBadge{
   position:absolute;
@@ -327,41 +413,21 @@ a:hover{text-decoration:underline}
   line-height:1.2;
   pointer-events:none;
 }
-.playlistOverlay{
-  position:absolute;
-  inset:auto 10px 10px auto;
-  z-index:3;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-height:32px;
-  padding:5px 10px;
-  border-radius:8px;
-  background:rgba(255,255,255,.92);
-  color:#0f0f0f;
-  font-size:12px;
-  font-weight:800;
-  box-shadow:0 1px 4px rgba(0,0,0,.08);
-  pointer-events:none;
-}
-.playlistOverlayLabel{
-  white-space:nowrap;
-}
 .playlistBody{
   display:flex;
   flex-direction:column;
   gap:4px;
-  padding-top:12px;
+  padding-top:14px;
 }
 .playlistTitle{
   font-size:16px;
-  line-height:1.35;
+  line-height:1.4;
   font-weight:700;
   display:-webkit-box;
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
   overflow:hidden;
-  min-height:2.7em;
+  min-height:2.8em;
 }
 .playlistChannel{
   font-size:14px;
@@ -369,6 +435,13 @@ a:hover{text-decoration:underline}
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
+}
+.playlistMetaLink{
+  font-size:13px;
+  color:var(--muted);
+}
+.playlistCard:hover .playlistMetaLink{
+  color:#111;
 }
 
 .channelsGrid{
@@ -382,24 +455,26 @@ a:hover{text-decoration:underline}
   align-items:center;
   gap:12px;
   padding:18px 14px;
-  border:1px solid var(--border);
+  border:1px solid #ededed;
   border-radius:18px;
   background:#fff;
   text-align:center;
   text-decoration:none;
-  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
 }
 .channelCard:hover{
   text-decoration:none;
   transform:translateY(-2px);
-  box-shadow:0 8px 24px rgba(0,0,0,.06);
-  border-color:#d9d9d9;
+  box-shadow:0 10px 28px rgba(0,0,0,.08);
+  border-color:#e3e3e3;
 }
 .channelCardMedia{
   display:flex;
   align-items:center;
   justify-content:center;
   width:100%;
+  min-height:104px;
 }
 .channelCardAvatar{
   width:92px;

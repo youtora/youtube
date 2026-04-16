@@ -102,6 +102,21 @@ function showErr(err){
   setPage(`<div class="h1">שגיאה</div><p class="sub">${esc(err?.message || String(err))}</p>`);
 }
 
+function setActiveNav(){
+  const path = location.pathname.replace(/\/+$/,"") || "/";
+  const links = document.querySelectorAll('.nav .navLink[data-link]');
+
+  links.forEach((link)=>{
+    const href = (link.getAttribute('href') || '').replace(/\/+$/, '') || '/';
+    let active = false;
+
+    if (href === '/') active = path === '/';
+    else active = path === href || path.startsWith(href + '/');
+
+    link.classList.toggle('active', active);
+  });
+}
+
 function headerSearch(){
   const form = $("searchForm");
   const input = $("searchInput");
@@ -389,21 +404,28 @@ async function pageChannels(){
 let playlistsState = { cursor: null, loading: false, done: false, token: 0 };
 
 function renderPlaylistCard(p){
-  const countText = p.item_count != null ? `${p.item_count} סרטונים` : "פלייליסט";
+  const count = Number(p.item_count);
+  const countText = Number.isFinite(count) && count > 0 ? `${count} סרטונים` : "פלייליסט";
+  const channelName = p.channel_title || p.channel_id || "";
+  const thumb = p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "";
+
   return `
     <a class="playlistCard" href="/${encodeURIComponent(p.playlist_id)}" data-link>
-      <span class="playlistThumbWrap thumbWrap">
-        <img class="thumb16x9" loading="lazy" decoding="async"
-             src="${esc(p.thumb_video_id ? ytVideoThumb(p.thumb_video_id) : "")}"
-             onerror="this.style.display='none'">
-        <span class="playlistCountBadge">${esc(countText)}</span>
-        <span class="playlistOverlay">
-          <span class="playlistOverlayLabel">פלייליסט</span>
+      <span class="playlistVisual">
+        <span class="playlistThumbWrap thumbWrap">
+          <img class="thumb16x9 playlistThumb" loading="lazy" decoding="async"
+               src="${esc(thumb)}"
+               onerror="this.style.display='none'">
+          <span class="playlistShade"></span>
+          <span class="playlistTypeBadge">פלייליסט</span>
+          <span class="playlistCountBadge">${esc(countText)}</span>
         </span>
       </span>
+
       <span class="playlistBody">
         <span class="playlistTitle">${esc(p.title || p.playlist_id)}</span>
-        <span class="playlistChannel">${esc(p.channel_title || p.channel_id || "")}</span>
+        <span class="playlistChannel">${esc(channelName)}</span>
+        <span class="playlistMetaLink">צפייה בפלייליסט</span>
       </span>
     </a>
   `;
@@ -887,6 +909,7 @@ async function pagePlaylist(playlist_id){
 /* ---------- ROUTER ---------- */
 async function render(){
   const { parts, qs } = route();
+  setActiveNav();
 
   if(parts.length === 0) return pageHome();
   if(parts[0] === "shorts") return pageShorts();
