@@ -10,27 +10,31 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" data-link aria-label="Youtora">
-      <img class="brandLogo" src="/youtora-logo.svg" alt="Youtora" />
-    </a>
+    <div class="topbarInner">
+      <div class="topbarMainRow">
+        <a class="brand" href="/" data-link aria-label="Youtora">
+          <img class="brandLogo" src="/youtora-logo.svg" alt="Youtora" />
+        </a>
 
-    <form class="search" id="searchForm" role="search">
-      <input id="searchInput" placeholder="חיפוש בכותרות…" autocomplete="off" />
-      <button type="submit" aria-label="חפש">
-        <svg class="searchIcon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.41-1.42-4.44-4.44A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" fill="currentColor"/>
-        </svg>
-      </button>
-    </form>
+        <form class="search" id="searchForm" role="search">
+          <button type="submit" aria-label="חפש">
+            <svg class="searchIcon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.41-1.42-4.44-4.44A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" fill="currentColor"/>
+            </svg>
+          </button>
+          <input id="searchInput" placeholder="חיפוש בכותרות…" autocomplete="off" />
+        </form>
+      </div>
 
-    <nav class="nav">
-      <a class="navLink" href="/" data-link>בית</a>
-      <a class="navLink" href="/shorts" data-link>שורטים</a>
-      <a class="navLink" href="/live" data-link>שידורים חיים</a>
-      <a class="navLink" href="/channels" data-link>ערוצים</a>
-      <a class="navLink" href="/playlists" data-link>פלייליסטים</a>
-      <a class="navLink" href="/admin.html">ניהול</a>
-    </nav>
+      <nav class="nav" aria-label="ניווט ראשי">
+        <a class="navLink" href="/" data-link>בית</a>
+        <a class="navLink" href="/shorts" data-link>שורטים</a>
+        <a class="navLink" href="/live" data-link>שידורים חיים</a>
+        <a class="navLink" href="/channels" data-link>ערוצים</a>
+        <a class="navLink" href="/playlists" data-link>פלייליסטים</a>
+        <a class="navLink" href="/admin.html">ניהול</a>
+      </nav>
+    </div>
   </header>
 
   <main class="shell">
