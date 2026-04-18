@@ -99,7 +99,19 @@ async function ytJson(url) {
   return JSON.parse(t);
 }
 
-async function fetchVideoKinds(env, ids) {
+function extractDurationSec(it) {
+  const sec = parseIsoDurationSec(it?.contentDetails?.duration || "");
+  return Number.isFinite(sec) && sec > 0 ? sec : null;
+}
+
+function buildVideoMeta(it) {
+  return {
+    video_kind: classifyVideoItem(it),
+    duration_sec: extractDurationSec(it)
+  };
+}
+
+async function fetchVideoMeta(env, ids) {
   const out = new Map();
   const uniq = [...new Set((ids || []).filter(Boolean))];
   if (!env.YT_API_KEY || !uniq.length) return out;
@@ -116,7 +128,7 @@ async function fetchVideoKinds(env, ids) {
 
     const data = await ytJson(u.toString());
     for (const it of (data?.items || [])) {
-      if (it?.id) out.set(it.id, classifyVideoItem(it));
+      if (it?.id) out.set(it.id, buildVideoMeta(it));
     }
   }
 
