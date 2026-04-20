@@ -66,6 +66,105 @@ async function api(url){
   return JSON.parse(t);
 }
 
+
+function absoluteUrl(pathOrUrl){
+  try { return new URL(pathOrUrl, location.origin).toString(); }
+  catch { return location.origin + "/"; }
+}
+function upsertMetaByName(name, content){
+  let el = document.head.querySelector(`meta[name="${name}"]`);
+  if(!el){
+    el = document.createElement("meta");
+    el.setAttribute("name", name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content || "");
+}
+function upsertMetaByProperty(prop, content){
+  let el = document.head.querySelector(`meta[property="${prop}"]`);
+  if(!el){
+    el = document.createElement("meta");
+    el.setAttribute("property", prop);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content || "");
+}
+function upsertCanonical(href){
+  let el = document.head.querySelector('link[rel="canonical"]');
+  if(!el){
+    el = document.createElement("link");
+    el.setAttribute("rel", "canonical");
+    document.head.appendChild(el);
+  }
+  el.setAttribute("href", absoluteUrl(href || location.pathname + location.search));
+}
+function upsertStructuredData(obj){
+  let el = document.head.querySelector('#structured-data');
+  if(!el){
+    el = document.createElement('script');
+    el.id = 'structured-data';
+    el.type = 'application/ld+json';
+    document.head.appendChild(el);
+  }
+  el.textContent = obj ? JSON.stringify(obj).replace(/</g, '\\u003c') : '';
+}
+function applyRouteMeta(meta={}){
+  const title = meta.title || 'Youtora';
+  const description = meta.description || 'Youtora - ספריית סרטונים, ערוצים ופלייליסטים מתעדכנת.';
+  const canonical = absoluteUrl(meta.canonical || (location.pathname + location.search));
+  const robots = meta.robots || 'index,follow,max-image-preview:large';
+  const image = absoluteUrl(meta.image || '/default-og.png');
+  const ogType = meta.type || 'website';
+
+  document.title = title;
+  upsertMetaByName('description', description);
+  upsertMetaByName('robots', robots);
+  upsertCanonical(canonical);
+  upsertMetaByProperty('og:type', ogType);
+  upsertMetaByProperty('og:site_name', 'Youtora');
+  upsertMetaByProperty('og:title', title);
+  upsertMetaByProperty('og:description', description);
+  upsertMetaByProperty('og:image', image);
+  upsertMetaByProperty('og:url', canonical);
+  upsertMetaByName('twitter:card', 'summary_large_image');
+  upsertMetaByName('twitter:title', title);
+  upsertMetaByName('twitter:description', description);
+  upsertMetaByName('twitter:image', image);
+  upsertStructuredData(meta.jsonLd || null);
+}
+function secondsToIsoDuration(sec){
+  const n = Number(sec || 0);
+  if(!Number.isFinite(n) || n <= 0) return '';
+  const total = Math.floor(n);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `PT${h ? `${h}H` : ''}${m ? `${m}M` : ''}${s || (!h && !m) ? `${s}S` : ''}`;
+}
+function latestSeo(kind=''){
+  if(kind === 'S') return {
+    title: 'Youtora | שורטים',
+    description: 'השורטים האחרונים מכל הערוצים ב־Youtora.',
+    canonical: '/shorts'
+  };
+  if(kind === 'L') return {
+    title: 'Youtora | שידורים חיים',
+    description: 'השידורים החיים האחרונים מכל הערוצים ב־Youtora.',
+    canonical: '/live'
+  };
+  return {
+    title: 'Youtora | סרטונים מכל הערוצים',
+    description: 'עמוד הבית של Youtora עם הסרטונים האחרונים מכל הערוצים.',
+    canonical: '/'
+  };
+}
+function channelTabLabel(tab){
+  if(tab === 'shorts') return 'שורטים';
+  if(tab === 'live') return 'שידורים חיים';
+  if(tab === 'playlists') return 'פלייליסטים';
+  return 'סרטונים';
+}
+
 function setPage(inner){
   $("page").innerHTML = `<div class="pad">${inner}</div>`;
 }
@@ -99,6 +198,7 @@ function route(){
 }
 
 function showErr(err){
+  applyRouteMeta({ title:'שגיאה | Youtora', description:'אירעה שגיאה בטעינת הדף.', robots:'noindex,follow' });
   setPage(`<div class="h1">שגיאה</div><p class="sub">${esc(err?.message || String(err))}</p>`);
 }
 
@@ -273,6 +373,7 @@ async function pageLatest(kind=""){
   latestState = { kind, cursor: null, loading: false, done: false, token: latestState.token + 1 };
   const t = latestState.token;
   const meta = latestPageMeta(kind);
+  applyRouteMeta(latestSeo(kind));
 
   setPage(`
     <div class="h1">${esc(meta.title)}</div>
@@ -382,6 +483,7 @@ function renderChannelCard(ch){
 
 async function pageChannels(){
   stopActiveObserver();
+  applyRouteMeta({ title:'Youtora | ערוצים', description:'רשימת כל הערוצים הזמינים ב־Youtora.', canonical:'/channels' });
 
   setPage(`<div class="muted">טוען ערוצים…</div>`);
   const data = await api(`/api/channels`);
@@ -433,6 +535,7 @@ function renderPlaylistCard(p){
 
 async function pagePlaylists(){
   stopActiveObserver();
+  applyRouteMeta({ title:'Youtora | פלייליסטים', description:'רשימת פלייליסטים מכל הערוצים ב־Youtora.', canonical:'/playlists' });
 
   playlistsState = { cursor: null, loading: false, done: false, token: playlistsState.token + 1 };
   const t = playlistsState.token;
@@ -522,9 +625,12 @@ async function pageSearch(q){
   stopActiveObserver();
 
   if(!q){
+    applyRouteMeta({ title:'חיפוש | Youtora', description:'חיפוש ב־Youtora.', canonical:'/search', robots:'noindex,follow' });
     setPage(`<div class="h1">חיפוש</div><p class="sub">הקלד מילה בחיפוש למעלה.</p>`);
     return;
   }
+
+  applyRouteMeta({ title:`חיפוש: ${q} | Youtora`, description:`תוצאות חיפוש עבור ${q} ב־Youtora.`, canonical:`/search?q=${encodeURIComponent(q)}`, robots:'noindex,follow' });
 
   const si = $("searchInput");
   if (si) si.value = q;
@@ -659,6 +765,20 @@ async function pageChannel(channel_id, tab){
 
   const ch = data.channel;
   const playlists = data.playlists || [];
+  const tabLabel = channelTabLabel(activeTab);
+  applyRouteMeta({
+    title: `${ch.title || ch.channel_id} | ${tabLabel} | Youtora`,
+    description: `${tabLabel} של הערוץ ${ch.title || ch.channel_id} ב־Youtora.`,
+    canonical: `/${encodeURIComponent(ch.channel_id)}/${activeTab}`,
+    image: ch.thumbnail_url || '/default-og.png',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: `${ch.title || ch.channel_id} - ${tabLabel}`,
+      description: `${tabLabel} של הערוץ ${ch.title || ch.channel_id} ב־Youtora.`,
+      url: absoluteUrl(`/${encodeURIComponent(ch.channel_id)}/${activeTab}`)
+    }
+  });
 
   const header = `
     <div class="avatarRow">
@@ -804,6 +924,24 @@ async function pageVideo(video_id){
   const data = await api(`/api/video?video_id=${encodeURIComponent(video_id)}`);
   const v = data.video;
   const rec = data.recommended || [];
+  applyRouteMeta({
+    title: `${v.title || v.video_id} | Youtora`,
+    description: (v.channel_title || v.channel_id) ? `${v.title || v.video_id} · ${v.channel_title || v.channel_id} · צפייה בסרטון ב־Youtora` : `${v.title || v.video_id} · צפייה בסרטון ב־Youtora`,
+    canonical: `/${encodeURIComponent(v.video_id)}`,
+    type: 'video.other',
+    image: ytVideoThumb(v.video_id, 'hqdefault'),
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'VideoObject',
+      name: v.title || v.video_id,
+      url: absoluteUrl(`/${encodeURIComponent(v.video_id)}`),
+      embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(v.video_id)}`,
+      thumbnailUrl: [ytVideoThumb(v.video_id, 'hqdefault')],
+      ...(fmtDate(v.published_at) ? { uploadDate: new Date(Number(v.published_at) * 1000).toISOString() } : {}),
+      ...(secondsToIsoDuration(v.duration_sec) ? { duration: secondsToIsoDuration(v.duration_sec) } : {}),
+      ...((v.channel_title || v.channel_id) ? { publisher: { '@type':'Organization', name: v.channel_title || v.channel_id } } : {})
+    }
+  });
 
   const player = `
     <iframe class="player"
@@ -892,6 +1030,19 @@ async function pagePlaylist(playlist_id){
   setPage(`<div class="muted">טוען פלייליסט…</div>`);
   const data = await api(`/api/playlist?playlist_id=${encodeURIComponent(playlist_id)}`);
   const p = data.playlist;
+  applyRouteMeta({
+    title: `${p.title || p.playlist_id} | פלייליסט | Youtora`,
+    description: (p.channel_title || p.channel_id) ? `${p.title || p.playlist_id} · פלייליסט מערוץ ${p.channel_title || p.channel_id}` : `${p.title || p.playlist_id} · פלייליסט לצפייה ב־Youtora`,
+    canonical: `/${encodeURIComponent(p.playlist_id)}`,
+    image: p.thumb_video_id ? ytVideoThumb(p.thumb_video_id, 'hqdefault') : '/default-og.png',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: p.title || p.playlist_id,
+      description: (p.channel_title || p.channel_id) ? `${p.title || p.playlist_id} · פלייליסט מערוץ ${p.channel_title || p.channel_id}` : `${p.title || p.playlist_id} · פלייליסט לצפייה ב־Youtora`,
+      url: absoluteUrl(`/${encodeURIComponent(p.playlist_id)}`)
+    }
+  });
 
   const player = `
     <iframe class="player"
@@ -944,6 +1095,7 @@ async function render(){
     return pageVideo(parts[0]);
   }
 
+  applyRouteMeta({ title:'לא נמצא | Youtora', description:'הדף לא נמצא.', canonical:location.pathname, robots:'noindex,follow' });
   setPage(`<div class="h1">לא נמצא</div><p class="sub"><a href="/" data-link>חזרה לבית</a></p>`);
 }
 
