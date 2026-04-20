@@ -12,7 +12,7 @@ export async function onRequest(context) {
   }
 
   if (normalizedPath === "/robots.txt") return serveRobots(currentUrl);
-  if (normalizedPath === "/sitemap.xml") return serveSitemapIndex(currentUrl);
+  if (normalizedPath === "/sitemap.xml") return serveSitemapIndex(env, currentUrl);
   if (normalizedPath === "/sitemap-static.xml") return serveStaticSitemap(currentUrl);
   if (normalizedPath === "/sitemap-videos.xml") return serveVideosSitemap(env, currentUrl);
   if (normalizedPath === "/sitemap-channels.xml") return serveChannelsSitemap(env, currentUrl);
@@ -104,44 +104,81 @@ async function serveRobots(url) {
   });
 }
 
-async function serveSitemap(env, url) {
-  const staticUrls = [
-    `${url.origin}/`,
-    `${url.origin}/shorts`,
-    `${url.origin}/live`,
-    `${url.origin}/channels`,
-    `${url.origin}/playlists`,
+async function serveSitemapIndex(env, url) {
+  const now = new Date().toISOString();
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>${xml(url.origin + "/sitemap-static.xml")}</loc><lastmod>${xml(now)}</lastmod></sitemap>
+  <sitemap><loc>${xml(url.origin + "/sitemap-videos.xml")}</loc><lastmod>${xml(now)}</lastmod></sitemap>
+  <sitemap><loc>${xml(url.origin + "/sitemap-channels.xml")}</loc><lastmod>${xml(now)}</lastmod></sitemap>
+  <sitemap><loc>${xml(url.origin + "/sitemap-playlists.xml")}</loc><lastmod>${xml(now)}</lastmod></sitemap>
+</sitemapindex>`;
+  return xmlResponse(body, 900);
+}
+
+async function serveStaticSitemap(url) {
+  const entries = [
+    { loc: `${url.origin}/` },
+    { loc: `${url.origin}/shorts` },
+    { loc: `${url.origin}/live` },
+    { loc: `${url.origin}/channels` },
+    { loc: `${url.origin}/playlists` },
   ];
+  return xmlResponse(buildUrlSet(entries), 900);
+}
 
-  const entries = [];
-  for (const loc of staticUrls) entries.push(`<url><loc>${xml(loc)}</loc></url>`);
+async function serveVideosSitemap(env, url) {
+  const rows = await safeAll(env.DB, `
+    SELECT video_id, published_at
+    FROM videos
+    ORDER BY published_at DESC
+    LIMIT 50000
+  `, []);
 
-  const videos = await safeAll(env.DB, `SELECT video_id, published_at FROM videos ORDER BY published_at DESC LIMIT 50000`, []);
-  for (const row of videos) {
-    const loc = `${url.origin}/${encodeURIComponent(row.video_id)}`;
-    const lastmod = toIsoDate(row.published_at);
-    entries.push(`<url><loc>${xml(loc)}</loc>${lastmod ? `<lastmod>${xml(lastmod)}</lastmod>` : ""}</url>`);
-  }
+  const entries = rows
+    .filter((row) => row?.video_id)
+    .map((row) => ({
+      loc: `${url.origin}/${encodeURIComponent(row.video_id)}`,
+      lastmod: toIsoDate(row.published_at),
+    }));
 
-  const channels = await safeAll(env.DB, `SELECT channel_id FROM channels ORDER BY channel_id ASC LIMIT 50000`, []);
-  for (const row of channels) {
-    const loc = `${url.origin}/${encodeURIComponent(row.channel_id)}/videos`;
-    entries.push(`<url><loc>${xml(loc)}</loc></url>`);
-  }
+  return xmlResponse(buildUrlSet(entries), 900);
+}
 
-  const playlists = await safeAll(env.DB, `SELECT playlist_id FROM playlists ORDER BY playlist_id ASC LIMIT 50000`, []);
-  for (const row of playlists) {
-    const loc = `${url.origin}/${encodeURIComponent(row.playlist_id)}`;
-    entries.push(`<url><loc>${xml(loc)}</loc></url>`);
-  }
+async function serveChannelsSitemap(env, url) {
+  const rows = await safeAll(env.DB, `
+    SELECT channel_id, updated_at
+    FROM channels
+    ORDER BY updated_at DESC, channel_id ASC
+    LIMIT 50000
+  `, []);
 
-  const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>`;
-  return new Response(xmlBody, {
-    headers: {
-      "Content-Type": "application/xml; charset=UTF-8",
-      "Cache-Control": "public, max-age=900",
-    },
-  });
+  const entries = rows
+    .filter((row) => row?.channel_id)
+    .map((row) => ({
+      loc: `${url.origin}/${encodeURIComponent(row.channel_id)}/videos`,
+      lastmod: toIsoDate(row.updated_at),
+    }));
+
+  return xmlResponse(buildUrlSet(entries), 900);
+}
+
+async function servePlaylistsSitemap(env, url) {
+  const rows = await safeAll(env.DB, `
+    SELECT playlist_id, updated_at
+    FROM playlists
+    ORDER BY updated_at DESC, playlist_id ASC
+    LIMIT 50000
+  `, []);
+
+  const entries = rows
+    .filter((row) => row?.playlist_id)
+    .map((row) => ({
+      loc: `${url.origin}/${encodeURIComponent(row.playlist_id)}`,
+      lastmod: toIsoDate(row.updated_at),
+    }));
+
+  return xmlResponse(buildUrlSet(entries), 900);
 }
 
 async function serveNotFound(env, request, url) {
