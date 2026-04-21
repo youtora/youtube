@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://youtora.com/api/sitemap-static</loc>
+  </sitemap>
+  <sitemap>
+    <loc>https://youtora.com/api/sitemap-videos</loc>
+  </sitemap>
+  <sitemap>
+    <loc>https://youtora.com/api/sitemap-channels</loc>
+  </sitemap>
+  <sitemap>
+    <loc>https://youtora.com/api/sitemap-playlists</loc>
+  </sitemap>
+</sitemapindex>
