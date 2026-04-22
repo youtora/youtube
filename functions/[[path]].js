@@ -45,16 +45,22 @@ export async function onRequest(context) {
   const url = new URL(currentUrl.toString());
   url.pathname = normalizedPath;
 
-  let route;
+  let route = null;
   try {
     route = await resolveRoute({ url, env });
   } catch (err) {
     console.error("resolveRoute failed", normalizedPath, err);
-    return serveNotFound(env, request, url);
   }
 
   if (!route?.found) {
-    return serveNotFound(env, request, url);
+    if (!isLikelySpaRoute(normalizedPath)) {
+      return serveNotFound(env, request, url);
+    }
+
+    route = {
+      found: true,
+      meta: buildFallbackMeta({ url, path: normalizedPath }),
+    };
   }
 
   let indexRes;
@@ -64,7 +70,7 @@ export async function onRequest(context) {
     rewritten = rewriteIndex(indexRes, route.meta);
   } catch (err) {
     console.error("rewriteIndex failed", normalizedPath, err);
-    return serveNotFound(env, request, url);
+    return env.ASSETS.fetch(new Request(new URL("/", url), request));
   }
   const out = new Response(rewritten.body, {
     status: 200,
@@ -124,17 +130,27 @@ function setAttr(name, value) {
 const VIDEO_SITEMAP_PAGE_SIZE = 5000;
 
 async function getCachedXml(request, ttlSeconds, producer) {
-  const cache = caches.default;
-  const cacheKey = new Request(request.url, request);
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  try {
+    const cache = caches.default;
+    const cacheKey = new Request(request.url, request);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
 
-  const response = await producer();
-  const out = new Response(response.body, response);
-  out.headers.set("Cache-Control", `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`);
+    const response = await producer();
+    const out = new Response(response.body, response);
+    out.headers.set("Cache-Control", `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`);
 
-  await cache.put(cacheKey, out.clone());
-  return out;
+    try {
+      await cache.put(cacheKey, out.clone());
+    } catch (err) {
+      console.error("cache.put failed", request.url, err);
+    }
+
+    return out;
+  } catch (err) {
+    console.error("getCachedXml failed", request.url, err);
+    return producer();
+  }
 }
 
 function xmlTextResponse(body, maxAge = 900) {
@@ -267,6 +283,82 @@ async function servePlaylistsSitemap(env, url) {
   return xmlResponse(buildUrlSet(entries), 900);
 }
 
+function isLikelySpaRoute(path) {
+  if (path === "/" || path === "/shorts" || path === "/live" || path === "/channels" || path === "/playlists" || path === "/search") {
+    return true;
+  }
+
+  if (/^\/([A-Za-z0-9_-]{11})$/.test(path)) return true;
+  if (/^\/(PL[A-Za-z0-9_-]+)$/.test(path)) return true;
+  if (/^\/(UC[A-Za-z0-9_-]{10,})(?:\/(videos|shorts|live|playlists))?$/.test(path)) return true;
+
+  return false;
+}
+
+function buildFallbackMeta({ url, path }) {
+  const staticMeta = getStaticMeta({ path, url });
+  if (staticMeta) {
+    return {
+      ...staticMeta,
+      origin: url.origin,
+      url: url.toString(),
+    };
+  }
+
+  const origin = url.origin;
+  const canonical = `${origin}${path}`;
+
+  if (/^\/([A-Za-z0-9_-]{11})$/.test(path)) {
+    return {
+      origin,
+      url: url.toString(),
+      canonical,
+      type: "video.other",
+      title: "Youtora | סרטון",
+      description: "צפייה בסרטון ב־Youtora.",
+      image: `${origin}/default-og.png`,
+      robots: "index,follow,max-image-preview:large",
+    };
+  }
+
+  if (/^\/(PL[A-Za-z0-9_-]+)$/.test(path)) {
+    return {
+      origin,
+      url: url.toString(),
+      canonical,
+      type: "website",
+      title: "Youtora | פלייליסט",
+      description: "פלייליסט לצפייה ב־Youtora.",
+      image: `${origin}/default-og.png`,
+      robots: "index,follow,max-image-preview:large",
+    };
+  }
+
+  if (/^\/(UC[A-Za-z0-9_-]{10,})(?:\/(videos|shorts|live|playlists))?$/.test(path)) {
+    return {
+      origin,
+      url: url.toString(),
+      canonical,
+      type: "website",
+      title: "Youtora | ערוץ",
+      description: "עמוד ערוץ ב־Youtora.",
+      image: `${origin}/default-og.png`,
+      robots: "index,follow,max-image-preview:large",
+    };
+  }
+
+  return {
+    origin,
+    url: url.toString(),
+    canonical,
+    type: "website",
+    title: "Youtora",
+    description: "ספריית וידאו ופלייליסטים מתעדכנת.",
+    image: `${origin}/default-og.png`,
+    robots: "index,follow,max-image-preview:large",
+  };
+}
+
 async function serveNotFound(env, request, url) {
   const res404 = await env.ASSETS.fetch(new Request(new URL("/404.html", url), request));
   const out = new Response(res404.body, {
@@ -301,12 +393,15 @@ async function resolveRoute({ url, env }) {
     `, [id]);
     if (!row) return { found: false };
 
-    const title = row.title || row.video_id;
-    const channelTitle = row.channel_title || row.channel_id || "";
+    const videoId = String(row.video_id || "").trim();
+    if (!videoId) return { found: false };
+
+    const title = String(row.title || videoId).trim() || videoId;
+    const channelTitle = String(row.channel_title || row.channel_id || "").trim();
     const description = channelTitle
       ? `${title} · ${channelTitle} · צפייה בסרטון ב־Youtora`
       : `${title} · צפייה בסרטון ב־Youtora`;
-    const canonical = `${origin}/${encodeURIComponent(row.video_id)}`;
+    const canonical = `${origin}/${encodeURIComponent(videoId)}`;
     return {
       found: true,
       meta: {
@@ -316,9 +411,9 @@ async function resolveRoute({ url, env }) {
         type: "video.other",
         title: `${title} | Youtora`,
         description,
-        image: `https://i.ytimg.com/vi/${row.video_id}/hqdefault.jpg`,
+        image: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
         robots: "index,follow,max-image-preview:large",
-        jsonLd: buildVideoJsonLd({ origin, row, canonical }),
+        jsonLd: buildVideoJsonLd({ row, canonical }),
       },
     };
   }
@@ -469,23 +564,31 @@ function getStaticMeta({ path, url }) {
   return null;
 }
 
-function buildVideoJsonLd({ origin, row, canonical }) {
+function buildVideoJsonLd({ row, canonical }) {
+  const videoId = String(row?.video_id || "").trim();
+  if (!videoId) return null;
+
   const json = {
     "@context": "https://schema.org",
     "@type": "VideoObject",
-    name: row.title || row.video_id,
+    name: String(row?.title || videoId).trim() || videoId,
     url: canonical,
-    embedUrl: `https://www.youtube.com/embed/${row.video_id}`,
-    thumbnailUrl: [`https://i.ytimg.com/vi/${row.video_id}/hqdefault.jpg`],
+    embedUrl: `https://www.youtube.com/embed/${videoId}`,
+    thumbnailUrl: [`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`],
   };
 
-  const channelTitle = row.channel_title || row.channel_id || "";
-  if (channelTitle) json.publisher = { "@type": "Organization", name: channelTitle };
+  const channelTitle = String(row?.channel_title || row?.channel_id || "").trim();
+  if (channelTitle) {
+    json.publisher = {
+      "@type": "Organization",
+      name: channelTitle,
+    };
+  }
 
-  const uploadDate = toIsoDateTime(row.published_at);
+  const uploadDate = toIsoDateTime(row?.published_at);
   if (uploadDate) json.uploadDate = uploadDate;
 
-  const duration = secondsToIsoDuration(row.duration_sec);
+  const duration = secondsToIsoDuration(row?.duration_sec);
   if (duration) json.duration = duration;
 
   return json;
@@ -518,7 +621,7 @@ function xmlResponse(body, maxAge = 900) {
   return new Response(body, {
     headers: {
       "Content-Type": "application/xml; charset=UTF-8",
-      "Cache-Control": `public, max-age=${maxAge}`,
+      "Cache-Control": `public, max-age=${maxAge}, s-maxage=${maxAge}`,
     },
   });
 }
