@@ -12,29 +12,60 @@ export async function onRequest(context) {
   }
 
   if (normalizedPath === "/robots.txt") return serveRobots(currentUrl);
-  if (normalizedPath === "/sitemap.xml") return serveSitemapIndex(env, currentUrl);
-  if (normalizedPath === "/sitemap-static.xml") return serveStaticSitemap(currentUrl);
-  if (normalizedPath === "/sitemap-videos.xml") return serveVideosSitemapIndex(env, currentUrl);
+
+  if (normalizedPath === "/sitemap.xml") {
+    return getCachedXml(request, 3600, () => serveSitemapIndex(env, currentUrl));
+  }
+
+  if (normalizedPath === "/sitemap-static.xml") {
+    return getCachedXml(request, 3600, () => serveStaticSitemap(currentUrl));
+  }
+
+  if (normalizedPath === "/sitemap-videos.xml") {
+    return getCachedXml(request, 3600, () => serveVideosSitemapIndex(env, currentUrl));
+  }
 
   const videoSitemapMatch = normalizedPath.match(/^\/sitemap-videos-(\d+)\.xml$/);
   if (videoSitemapMatch) {
-    return serveVideosSitemapPage(env, currentUrl, Number(videoSitemapMatch[1]));
+    return getCachedXml(request, 3600, () =>
+      serveVideosSitemapPage(env, currentUrl, Number(videoSitemapMatch[1]))
+    );
   }
 
-  if (normalizedPath === "/sitemap-channels.xml") return serveChannelsSitemap(env, currentUrl);
-  if (normalizedPath === "/sitemap-playlists.xml") return servePlaylistsSitemap(env, currentUrl);  if (normalizedPath.startsWith("/api/")) return env.ASSETS.fetch(request);
+  if (normalizedPath === "/sitemap-channels.xml") {
+    return getCachedXml(request, 3600, () => serveChannelsSitemap(env, currentUrl));
+  }
+
+  if (normalizedPath === "/sitemap-playlists.xml") {
+    return getCachedXml(request, 3600, () => servePlaylistsSitemap(env, currentUrl));
+  }
+  if (normalizedPath.startsWith("/api/")) return env.ASSETS.fetch(request);
   if (normalizedPath.includes(".")) return env.ASSETS.fetch(request);
 
   const url = new URL(currentUrl.toString());
   url.pathname = normalizedPath;
 
-  const route = await resolveRoute({ url, env });
+  let route;
+  try {
+    route = await resolveRoute({ url, env });
+  } catch (err) {
+    console.error("resolveRoute failed", normalizedPath, err);
+    return serveNotFound(env, request, url);
+  }
+
   if (!route?.found) {
     return serveNotFound(env, request, url);
   }
 
-  const indexRes = await env.ASSETS.fetch(new Request(new URL("/", url), request));
-  const rewritten = rewriteIndex(indexRes, route.meta);
+  let indexRes;
+  let rewritten;
+  try {
+    indexRes = await env.ASSETS.fetch(new Request(new URL("/", url), request));
+    rewritten = rewriteIndex(indexRes, route.meta);
+  } catch (err) {
+    console.error("rewriteIndex failed", normalizedPath, err);
+    return serveNotFound(env, request, url);
+  }
   const out = new Response(rewritten.body, {
     status: 200,
     statusText: rewritten.statusText,
@@ -90,7 +121,30 @@ function setAttr(name, value) {
     },
   };
 }
-const VIDEO_SITEMAP_PAGE_SIZE = 20000;
+const VIDEO_SITEMAP_PAGE_SIZE = 5000;
+
+async function getCachedXml(request, ttlSeconds, producer) {
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  const response = await producer();
+  const out = new Response(response.body, response);
+  out.headers.set("Cache-Control", `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`);
+
+  await cache.put(cacheKey, out.clone());
+  return out;
+}
+
+function xmlTextResponse(body, maxAge = 900) {
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/xml; charset=UTF-8",
+      "Cache-Control": `public, max-age=${maxAge}, s-maxage=${maxAge}`,
+    },
+  });
+}
 
 async function serveRobots(url) {
   const body = [
