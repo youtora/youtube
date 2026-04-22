@@ -14,11 +14,15 @@ export async function onRequest(context) {
   if (normalizedPath === "/robots.txt") return serveRobots(currentUrl);
   if (normalizedPath === "/sitemap.xml") return serveSitemapIndex(env, currentUrl);
   if (normalizedPath === "/sitemap-static.xml") return serveStaticSitemap(currentUrl);
-  if (normalizedPath === "/sitemap-videos.xml") return serveVideosSitemap(env, currentUrl);
-  if (normalizedPath === "/sitemap-channels.xml") return serveChannelsSitemap(env, currentUrl);
-  if (normalizedPath === "/sitemap-playlists.xml") return servePlaylistsSitemap(env, currentUrl);
+  if (normalizedPath === "/sitemap-videos.xml") return serveVideosSitemapIndex(env, currentUrl);
 
-  if (normalizedPath.startsWith("/api/")) return env.ASSETS.fetch(request);
+  const videoSitemapMatch = normalizedPath.match(/^\/sitemap-videos-(\d+)\.xml$/);
+  if (videoSitemapMatch) {
+    return serveVideosSitemapPage(env, currentUrl, Number(videoSitemapMatch[1]));
+  }
+
+  if (normalizedPath === "/sitemap-channels.xml") return serveChannelsSitemap(env, currentUrl);
+  if (normalizedPath === "/sitemap-playlists.xml") return servePlaylistsSitemap(env, currentUrl);  if (normalizedPath.startsWith("/api/")) return env.ASSETS.fetch(request);
   if (normalizedPath.includes(".")) return env.ASSETS.fetch(request);
 
   const url = new URL(currentUrl.toString());
@@ -86,6 +90,7 @@ function setAttr(name, value) {
     },
   };
 }
+const VIDEO_SITEMAP_PAGE_SIZE = 20000;
 
 async function serveRobots(url) {
   const body = [
@@ -127,13 +132,41 @@ async function serveStaticSitemap(url) {
   return xmlResponse(buildUrlSet(entries), 900);
 }
 
-async function serveVideosSitemap(env, url) {
+async function serveVideosSitemapIndex(env, url) {
+  const countRow = await firstRow(env.DB, `
+    SELECT COUNT(*) AS total
+    FROM videos
+  `, []);
+
+  const total = Number(countRow?.total || 0);
+  const pages = Math.max(1, Math.ceil(total / VIDEO_SITEMAP_PAGE_SIZE));
+  const now = new Date().toISOString();
+
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${Array.from({ length: pages }, (_, i) => {
+  const page = i + 1;
+  return `  <sitemap><loc>${xml(url.origin + `/sitemap-videos-${page}.xml`)}</loc><lastmod>${xml(now)}</lastmod></sitemap>`;
+}).join("\n")}
+</sitemapindex>`;
+
+  return xmlResponse(body, 900);
+}
+
+async function serveVideosSitemapPage(env, url, pageNumber) {
+  const page = Math.max(1, Number(pageNumber || 1));
+  const offset = (page - 1) * VIDEO_SITEMAP_PAGE_SIZE;
+
   const rows = await safeAll(env.DB, `
     SELECT video_id, published_at
     FROM videos
     ORDER BY published_at DESC
-    LIMIT 50000
-  `, []);
+    LIMIT ? OFFSET ?
+  `, [VIDEO_SITEMAP_PAGE_SIZE, offset]);
+
+  if (!rows.length && page > 1) {
+    return new Response("Not found", { status: 404 });
+  }
 
   const entries = rows
     .filter((row) => row?.video_id)
