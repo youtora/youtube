@@ -140,13 +140,12 @@ async function serveVideosSitemapIndex(env, url) {
 
   const total = Number(countRow?.total || 0);
   const pages = Math.max(1, Math.ceil(total / VIDEO_SITEMAP_PAGE_SIZE));
-  const now = new Date().toISOString();
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${Array.from({ length: pages }, (_, i) => {
   const page = i + 1;
-  return `  <sitemap><loc>${xml(url.origin + `/sitemap-videos-${page}.xml`)}</loc><lastmod>${xml(now)}</lastmod></sitemap>`;
+  return `  <sitemap><loc>${xml(url.origin + `/sitemap-videos-${page}.xml`)}</loc></sitemap>`;
 }).join("\n")}
 </sitemapindex>`;
 
