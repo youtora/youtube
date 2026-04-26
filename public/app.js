@@ -51,6 +51,23 @@ function fmtDuration(sec){
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+function fmtCount(value){
+  const n = Number(value);
+  if(!Number.isFinite(n) || n < 0) return "";
+  try { return new Intl.NumberFormat('he-IL', { notation:'compact', maximumFractionDigits:1 }).format(n); }
+  catch { return String(Math.round(n)); }
+}
+function fmtViews(value){
+  const s = fmtCount(value);
+  return s ? `${s} צפיות` : "";
+}
+function fmtLikes(value){
+  const s = fmtCount(value);
+  return s ? `${s} לייקים` : "";
+}
+function arr(value){
+  return Array.isArray(value) ? value : [];
+}
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
 function ytShortThumb(videoId){ return videoId ? `https://i.ytimg.com/vi/${videoId}/oar2.jpg` : ""; }
 function videoKindLabel(kind){
@@ -234,6 +251,7 @@ function renderShortCard(v){
   const thumb = ytShortThumb(v.video_id);
   const relDate = fmtDateRel(v.published_at);
   const duration = fmtDuration(v.duration_sec);
+  const views = fmtViews(v.view_count);
   const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
   const channelName = v.channel_title || v.channel_id || "";
   const channelThumb = v.channel_thumbnail_url || "";
@@ -265,7 +283,7 @@ function renderShortCard(v){
           }
 
           <div class="videoMetaStack">
-            <div class="videoMetaDate">${esc(relDate)}</div>
+            <div class="videoMetaDate">${esc([relDate, views].filter(Boolean).join(" · "))}</div>
             ${channelHref
               ? `<a class="videoChannelLink videoChannelBelow shortChannelLink" href="${channelHref}" data-link>${esc(channelName)}</a>`
               : `<div class="videoChannelLink videoChannelBelow shortChannelLink">${esc(channelName)}</div>`
@@ -281,6 +299,7 @@ function renderVideoCard(v){
   const thumb = ytVideoThumb(v.video_id);
   const relDate = fmtDateRel(v.published_at);
   const duration = fmtDuration(v.duration_sec);
+  const views = fmtViews(v.view_count);
   const channelHref = v.channel_id ? `/${encodeURIComponent(v.channel_id)}/videos` : "";
   const channelName = v.channel_title || v.channel_id || "";
   const channelThumb = v.channel_thumbnail_url || "";
@@ -312,7 +331,7 @@ function renderVideoCard(v){
           }
 
           <div class="videoMetaStack">
-            <div class="videoMetaDate">${esc(relDate)}</div>
+            <div class="videoMetaDate">${esc([relDate, views].filter(Boolean).join(" · "))}</div>
             ${channelHref
               ? `<a class="videoChannelLink videoChannelBelow" href="${channelHref}" data-link>${esc(channelName)}</a>`
               : `<div class="videoChannelLink videoChannelBelow">${esc(channelName)}</div>`
@@ -621,8 +640,10 @@ async function playlistsLoadMore(token){
 /* ---------- SEARCH (with cursor pagination) ---------- */
 let searchState = { key: "", cursor: null, loading: false, done: false, token: 0 };
 
-async function pageSearch(q){
+async function pageSearch(q, scope="title"){
   stopActiveObserver();
+
+  const searchScope = scope === "all" ? "all" : "title";
 
   if(!q){
     applyRouteMeta({ title:'חיפוש | Youtora', description:'חיפוש ב־Youtora.', canonical:'/search', robots:'noindex,follow' });
@@ -630,17 +651,24 @@ async function pageSearch(q){
     return;
   }
 
-  applyRouteMeta({ title:`חיפוש: ${q} | Youtora`, description:`תוצאות חיפוש עבור ${q} ב־Youtora.`, canonical:`/search?q=${encodeURIComponent(q)}`, robots:'noindex,follow' });
+  const canonical = `/search?q=${encodeURIComponent(q)}${searchScope === "all" ? "&scope=all" : ""}`;
+  applyRouteMeta({ title:`חיפוש: ${q} | Youtora`, description:`תוצאות חיפוש עבור ${q} ב־Youtora.`, canonical, robots:'noindex,follow' });
 
   const si = $("searchInput");
   if (si) si.value = q;
 
-  searchState = { key: q, cursor: null, loading: false, done: false, token: searchState.token + 1 };
+  searchState = { key: `${q}|${searchScope}`, cursor: null, loading: false, done: false, token: searchState.token + 1 };
   const t = searchState.token;
 
   setPage(`
     <div class="h1">תוצאות חיפוש</div>
     <p class="sub">מילת חיפוש: <b>${esc(q)}</b></p>
+
+    <div class="tabs" style="margin-top:10px">
+      <a class="tab ${searchScope === "title" ? "active" : ""}" href="/search?q=${encodeURIComponent(q)}" data-link>כותרות בלבד</a>
+      <a class="tab ${searchScope === "all" ? "active" : ""}" href="/search?q=${encodeURIComponent(q)}&scope=all" data-link>כולל תיאור ותגיות</a>
+    </div>
+
     <div class="hr"></div>
 
     <div id="searchGrid" class="grid"></div>
@@ -659,19 +687,19 @@ async function pageSearch(q){
   const hint = document.getElementById("searchHint");
   const sentinel = document.getElementById("searchSentinel");
 
-  btn.onclick = () => searchLoadMore(t, q);
+  btn.onclick = () => searchLoadMore(t, q, searchScope);
 
   const hasIO = typeof IntersectionObserver !== "undefined";
   if (!hasIO) btn.style.display = "inline-flex";
 
   // טעינה ראשונה
-  await searchLoadMore(t, q);
+  await searchLoadMore(t, q, searchScope);
 
   // אינסוף־סקрол
   if (hasIO && !searchState.done) {
     startInfiniteScroll({
       sentinelEl: sentinel,
-      onNearEnd: () => searchLoadMore(t, q),
+      onNearEnd: () => searchLoadMore(t, q, searchScope),
       enabled: true,
       rootMargin: "200px 0px",
     });
@@ -680,9 +708,10 @@ async function pageSearch(q){
   if (hint) hint.textContent = searchState.done ? "סוף הרשימה." : "";
 }
 
-async function searchLoadMore(token, q){
+async function searchLoadMore(token, q, scope="title"){
+  const searchScope = scope === "all" ? "all" : "title";
   if (searchState.loading || searchState.done) return;
-  if (searchState.key !== q) return;
+  if (searchState.key !== `${q}|${searchScope}`) return;
 
   searchState.loading = true;
 
@@ -694,7 +723,7 @@ async function searchLoadMore(token, q){
   if (hint) hint.textContent = "טוען…";
 
   const url =
-    `/api/search?q=${encodeURIComponent(q)}&limit=50` +
+    `/api/search?q=${encodeURIComponent(q)}&limit=50&scope=${encodeURIComponent(searchScope)}` +
     (searchState.cursor ? `&cursor=${encodeURIComponent(searchState.cursor)}` : "");
 
 
@@ -924,9 +953,13 @@ async function pageVideo(video_id){
   const data = await api(`/api/video?video_id=${encodeURIComponent(video_id)}`);
   const v = data.video;
   const rec = data.recommended || [];
+  const cleanDescription = String(v.description || "").trim();
+  const seoDescription = cleanDescription
+    ? cleanDescription.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 165)
+    : ((v.channel_title || v.channel_id) ? `${v.title || v.video_id} · ${v.channel_title || v.channel_id} · צפייה בסרטון ב־Youtora` : `${v.title || v.video_id} · צפייה בסרטון ב־Youtora`);
   applyRouteMeta({
     title: `${v.title || v.video_id} | Youtora`,
-    description: (v.channel_title || v.channel_id) ? `${v.title || v.video_id} · ${v.channel_title || v.channel_id} · צפייה בסרטון ב־Youtora` : `${v.title || v.video_id} · צפייה בסרטון ב־Youtora`,
+    description: seoDescription,
     canonical: `/${encodeURIComponent(v.video_id)}`,
     type: 'video.other',
     image: ytVideoThumb(v.video_id, 'hqdefault'),
@@ -939,6 +972,15 @@ async function pageVideo(video_id){
       thumbnailUrl: [ytVideoThumb(v.video_id, 'hqdefault')],
       ...(fmtDate(v.published_at) ? { uploadDate: new Date(Number(v.published_at) * 1000).toISOString() } : {}),
       ...(secondsToIsoDuration(v.duration_sec) ? { duration: secondsToIsoDuration(v.duration_sec) } : {}),
+      ...(cleanDescription ? { description: cleanDescription } : {}),
+      ...((arr(v.tags).length || arr(v.hashtags).length) ? { keywords: [...new Set([...arr(v.tags), ...arr(v.hashtags)])].join(', ') } : {}),
+      ...(Number(v.view_count) > 0 ? {
+        interactionStatistic: {
+          '@type': 'InteractionCounter',
+          interactionType: { '@type': 'WatchAction' },
+          userInteractionCount: Number(v.view_count)
+        }
+      } : {}),
       ...((v.channel_title || v.channel_id) ? { publisher: { '@type':'Organization', name: v.channel_title || v.channel_id } } : {})
     }
   });
@@ -956,7 +998,21 @@ async function pageVideo(video_id){
       <section class="watchMain">
         ${player}
         <div class="h1" style="margin-top:10px">${esc(v.title || v.video_id)}</div>
-        <p class="sub">${[fmtDateRel(v.published_at) ? `פורסם: ${esc(fmtDateRel(v.published_at))}` : "", fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : ""].filter(Boolean).join(" · ")}</p>
+        <p class="sub">${[
+          fmtDateRel(v.published_at) ? `פורסם: ${esc(fmtDateRel(v.published_at))}` : "",
+          fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : "",
+          fmtViews(v.view_count),
+          fmtLikes(v.like_count)
+        ].filter(Boolean).join(" · ")}</p>
+
+        ${cleanDescription ? `<div class="videoDescription">${esc(cleanDescription)}</div>` : ``}
+
+        ${(arr(v.tags).length || arr(v.hashtags).length) ? `
+          <div class="tagRow">
+            ${arr(v.hashtags).map(t => `<span class="tagChip">#${esc(t)}</span>`).join("")}
+            ${arr(v.tags).slice(0, 20).map(t => `<span class="tagChip">${esc(t)}</span>`).join("")}
+          </div>
+        ` : ``}
 
         <div class="hr"></div>
 
@@ -1077,7 +1133,7 @@ async function render(){
   if(parts[0] === "live") return pageLive();
   if(parts[0] === "channels") return pageChannels();
   if(parts[0] === "playlists") return pagePlaylists();
-  if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim());
+  if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim(), (qs.get("scope")||"title").trim());
 
   // /UC.../videos /shorts /live /playlists
   if(parts.length >= 1 && isChannelId(parts[0])){

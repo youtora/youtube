@@ -1,3 +1,5 @@
+import { parseJsonArray } from "./_shared/video-meta.js";
+
 export async function onRequest(context) {
   const { request, env } = context;
   const currentUrl = new URL(request.url);
@@ -384,10 +386,22 @@ async function resolveRoute({ url, env }) {
   if (mVideo) {
     const id = mVideo[1];
     const row = await firstRow(env.DB, `
-      SELECT v.video_id, v.title, v.published_at, v.duration_sec, v.channel_id,
-             c.title AS channel_title
+      SELECT
+        v.video_id,
+        v.title,
+        v.published_at,
+        v.duration_sec,
+        v.view_count,
+        v.like_count,
+        v.comment_count,
+        c.channel_id,
+        c.title AS channel_title,
+        d.description AS video_description,
+        d.tags_json,
+        d.hashtags_json
       FROM videos v
-      LEFT JOIN channels c ON c.channel_id = v.channel_id
+      JOIN channels c ON c.id = v.channel_int
+      LEFT JOIN video_details d ON d.video_id = v.video_id
       WHERE v.video_id = ?
       LIMIT 1
     `, [id]);
@@ -398,9 +412,12 @@ async function resolveRoute({ url, env }) {
 
     const title = String(row.title || videoId).trim() || videoId;
     const channelTitle = String(row.channel_title || row.channel_id || "").trim();
-    const description = channelTitle
-      ? `${title} · ${channelTitle} · צפייה בסרטון ב־Youtora`
-      : `${title} · צפייה בסרטון ב־Youtora`;
+    const rawVideoDescription = String(row.video_description || "").trim();
+    const description = rawVideoDescription
+      ? makeSeoDescription(rawVideoDescription, title, channelTitle)
+      : channelTitle
+        ? `${title} · ${channelTitle} · צפייה בסרטון ב־Youtora`
+        : `${title} · צפייה בסרטון ב־Youtora`;
     const canonical = `${origin}/${encodeURIComponent(videoId)}`;
     return {
       found: true,
@@ -422,10 +439,10 @@ async function resolveRoute({ url, env }) {
   if (mPlaylist) {
     const playlistId = mPlaylist[1];
     const row = await firstRow(env.DB, `
-      SELECT p.playlist_id, p.title, p.thumb_video_id, p.channel_id,
+      SELECT p.playlist_id, p.title, p.thumb_video_id, c.channel_id,
              c.title AS channel_title
       FROM playlists p
-      LEFT JOIN channels c ON c.channel_id = p.channel_id
+      LEFT JOIN channels c ON c.id = p.channel_int
       WHERE p.playlist_id = ?
       LIMIT 1
     `, [playlistId]);
@@ -564,6 +581,16 @@ function getStaticMeta({ path, url }) {
   return null;
 }
 
+function makeSeoDescription(description, title, channelTitle) {
+  const clean = String(description || "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const base = clean || [title, channelTitle].filter(Boolean).join(" · ");
+  return base.length > 165 ? `${base.slice(0, 162).trim()}…` : base;
+}
+
 function buildVideoJsonLd({ row, canonical }) {
   const videoId = String(row?.video_id || "").trim();
   if (!videoId) return null;
@@ -576,6 +603,24 @@ function buildVideoJsonLd({ row, canonical }) {
     embedUrl: `https://www.youtube.com/embed/${videoId}`,
     thumbnailUrl: [`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`],
   };
+
+  const description = String(row?.video_description || "").trim();
+  if (description) json.description = description;
+
+  const tags = [
+    ...parseJsonArray(row?.tags_json),
+    ...parseJsonArray(row?.hashtags_json)
+  ].filter(Boolean);
+  if (tags.length) json.keywords = [...new Set(tags)].join(", ");
+
+  const viewCount = Number(row?.view_count || 0);
+  if (Number.isFinite(viewCount) && viewCount > 0) {
+    json.interactionStatistic = {
+      "@type": "InteractionCounter",
+      interactionType: { "@type": "WatchAction" },
+      userInteractionCount: viewCount
+    };
+  }
 
   const channelTitle = String(row?.channel_title || row?.channel_id || "").trim();
   if (channelTitle) {

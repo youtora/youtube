@@ -1,3 +1,5 @@
+import { parseJsonArray } from "../_shared/video-meta.js";
+
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
@@ -10,9 +12,24 @@ export async function onRequest({ env, request }) {
   const recLimit = clamp(parseInt(url.searchParams.get("recommended_limit") || "20", 10), 1, 60);
 
   const vrow = await env.DB.prepare(`
-    SELECT id, video_id, title, published_at, channel_int, video_kind, duration_sec
-    FROM videos
-    WHERE video_id = ?
+    SELECT
+      v.id,
+      v.video_id,
+      v.title,
+      v.published_at,
+      v.channel_int,
+      v.video_kind,
+      v.duration_sec,
+      v.view_count,
+      v.like_count,
+      v.comment_count,
+      d.description,
+      d.tags_json,
+      d.hashtags_json,
+      d.fetched_at AS details_fetched_at
+    FROM videos v
+    LEFT JOIN video_details d ON d.video_id = v.video_id
+    WHERE v.video_id = ?
     LIMIT 1
   `).bind(video_id).first();
 
@@ -31,6 +48,13 @@ export async function onRequest({ env, request }) {
     published_at: vrow.published_at,
     video_kind: vrow.video_kind || "",
     duration_sec: vrow.duration_sec ?? null,
+    view_count: vrow.view_count ?? null,
+    like_count: vrow.like_count ?? null,
+    comment_count: vrow.comment_count ?? null,
+    description: vrow.description || "",
+    tags: parseJsonArray(vrow.tags_json),
+    hashtags: parseJsonArray(vrow.hashtags_json),
+    details_fetched_at: vrow.details_fetched_at ?? null,
     channel_id: crow?.channel_id || null,
     channel_title: crow?.channel_title || null,
     thumbnail_url: crow?.thumbnail_url || null,
@@ -43,6 +67,9 @@ export async function onRequest({ env, request }) {
       v.published_at,
       v.video_kind,
       v.duration_sec,
+      v.view_count,
+      v.like_count,
+      v.comment_count,
       c.channel_id,
       c.title AS channel_title,
       c.thumbnail_url AS channel_thumbnail_url
@@ -61,6 +88,9 @@ export async function onRequest({ env, request }) {
     published_at: r.published_at,
     video_kind: r.video_kind || "",
     duration_sec: r.duration_sec ?? null,
+    view_count: r.view_count ?? null,
+    like_count: r.like_count ?? null,
+    comment_count: r.comment_count ?? null,
     channel_id: r.channel_id || null,
     channel_title: r.channel_title || null,
     channel_thumbnail_url: r.channel_thumbnail_url || null,

@@ -81,7 +81,7 @@ export async function onRequest({ env, request }) {
       vids =
         (cursorP !== null && cursorId > 0)
           ? await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind, duration_sec
+              SELECT id, video_id, title, published_at, video_kind, duration_sec, view_count, like_count, comment_count
               FROM videos
               WHERE channel_int = ?
                 AND video_kind = ?
@@ -90,7 +90,7 @@ export async function onRequest({ env, request }) {
               LIMIT ?
             `).bind(chRow.id, kind, cursorP, cursorId, videos_limit).all()
           : await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind, duration_sec
+              SELECT id, video_id, title, published_at, video_kind, duration_sec, view_count, like_count, comment_count
               FROM videos
               WHERE channel_int = ?
                 AND video_kind = ?
@@ -101,7 +101,7 @@ export async function onRequest({ env, request }) {
       vids =
         (cursorP !== null && cursorId > 0)
           ? await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind, duration_sec
+              SELECT id, video_id, title, published_at, video_kind, duration_sec, view_count, like_count, comment_count
               FROM videos INDEXED BY idx_videos_channel_cover
               WHERE channel_int = ?
                 AND (published_at, id) < (?, ?)
@@ -109,7 +109,7 @@ export async function onRequest({ env, request }) {
               LIMIT ?
             `).bind(chRow.id, cursorP, cursorId, videos_limit).all()
           : await env.DB.prepare(`
-              SELECT id, video_id, title, published_at, video_kind, duration_sec
+              SELECT id, video_id, title, published_at, video_kind, duration_sec, view_count, like_count, comment_count
               FROM videos INDEXED BY idx_videos_channel_cover
               WHERE channel_int = ?
               ORDER BY published_at DESC, id DESC
@@ -124,7 +124,10 @@ export async function onRequest({ env, request }) {
       title: r.title,
       published_at: r.published_at,
       video_kind: r.video_kind || "",
-      duration_sec: r.duration_sec ?? null
+      duration_sec: r.duration_sec ?? null,
+      view_count: r.view_count ?? null,
+      like_count: r.like_count ?? null,
+      comment_count: r.comment_count ?? null
     }));
 
     const last = rows[rows.length - 1];
