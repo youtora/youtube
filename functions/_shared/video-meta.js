@@ -44,6 +44,10 @@ function cleanText(value, maxLen){
   return s ? s.slice(0, maxLen) : "";
 }
 
+function normalizeTagKey(value){
+  return String(value || "").trim().replace(/^#+/, "").trim().toLocaleLowerCase();
+}
+
 function cleanTags(tags){
   if(!Array.isArray(tags)) return [];
   const out = [];
@@ -53,8 +57,8 @@ function cleanTags(tags){
     const tag = cleanText(raw, 120);
     if(!tag) continue;
 
-    const key = tag.toLocaleLowerCase();
-    if(seen.has(key)) continue;
+    const key = normalizeTagKey(tag);
+    if(!key || seen.has(key)) continue;
 
     seen.add(key);
     out.push(tag);
@@ -77,8 +81,8 @@ export function extractHashtags(...texts){
       const tag = cleanText(m[2], 80);
       if(!tag) continue;
 
-      const key = tag.toLocaleLowerCase();
-      if(seen.has(key)) continue;
+      const key = normalizeTagKey(tag);
+      if(!key || seen.has(key)) continue;
 
       seen.add(key);
       out.push(tag);
@@ -146,6 +150,60 @@ export async function fetchVideoMeta(env, ids){
   return out;
 }
 
+function uniqueIndexedTags(tags, type, maxLen){
+  const out = [];
+  const seen = new Set();
+
+  for(const raw of tags || []){
+    const value = cleanText(raw, maxLen);
+    const norm = normalizeTagKey(value);
+    if(!value || !norm || seen.has(norm)) continue;
+
+    seen.add(norm);
+    out.push({ type, value, norm });
+  }
+
+  return out;
+}
+
+function videoTagIndexStmts(env, videoId, tags, hashtags){
+  const items = [
+    ...uniqueIndexedTags(tags, "tag", 120),
+    ...uniqueIndexedTags(hashtags, "hashtag", 80)
+  ];
+
+  const stmts = [
+    env.DB.prepare(`DELETE FROM video_tags WHERE video_id = ?`).bind(videoId)
+  ];
+
+  for(let i = 0; i < items.length; i += 25){
+    const chunk = items.slice(i, i + 25);
+    if(!chunk.length) continue;
+
+    const valuesSql = chunk.map(() => "(?, ?, ?)").join(", ");
+    const binds = [];
+
+    for(const item of chunk){
+      binds.push(item.type, item.value, item.norm);
+    }
+
+    binds.push(videoId, videoId);
+
+    stmts.push(env.DB.prepare(`
+      WITH input(tag_type, tag_value, tag_norm) AS (
+        VALUES ${valuesSql}
+      )
+      INSERT OR IGNORE INTO video_tags(video_id, tag_type, tag_value, tag_norm, video_rowid)
+      SELECT ?, input.tag_type, input.tag_value, input.tag_norm, v.id
+      FROM input
+      JOIN videos AS v
+        ON v.video_id = ?
+    `).bind(...binds));
+  }
+
+  return stmts;
+}
+
 export function videoDetailsStmts(env, videoId, meta, ts){
   const tags = Array.isArray(meta?.tags) ? meta.tags : [];
   const hashtags = Array.isArray(meta?.hashtags) ? meta.hashtags : [];
@@ -198,7 +256,8 @@ export function videoDetailsStmts(env, videoId, meta, ts){
     env.DB.prepare(`
       INSERT INTO video_details_fts(video_id, description, tags, hashtags)
       VALUES(?, ?, ?, ?)
-    `).bind(videoId, description, tagsText, hashtagsText)
+    `).bind(videoId, description, tagsText, hashtagsText),
+    ...videoTagIndexStmts(env, videoId, tags, hashtags)
   ];
 }
 
