@@ -12,7 +12,10 @@ function normalizeTagName(value) {
 }
 
 function normalizeTagKey(value) {
-  return normalizeTagName(value).toLocaleLowerCase();
+  return normalizeTagName(value)
+    .replace(/[“”״"]/g, '"')
+    .replace(/[‘’׳']/g, "'")
+    .toLocaleLowerCase();
 }
 
 function normalizeTagType(value) {
