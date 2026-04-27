@@ -33,6 +33,6 @@ export async function onRequest({ env, request }) {
 
   return Response.json(
     { playlist },
-    { headers: { "cache-control": "no-store" } }
+    { headers: { "cache-control": "public, max-age=300" } }
   );
 }
