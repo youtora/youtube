@@ -18,7 +18,7 @@ export async function onRequest({ env, request }) {
     ? await env.DB.prepare(`
         SELECT video_id
         FROM videos
-        ORDER BY id DESC
+        ORDER BY COALESCE(stats_fetched_at, 0) ASC, id ASC
         LIMIT ?
       `).bind(limit).all()
     : await env.DB.prepare(`
