@@ -454,6 +454,7 @@ async function resolveRoute({ url, env }) {
         v.video_id,
         v.title,
         v.published_at,
+        v.channel_int,
         v.duration_sec,
         v.view_count,
         v.like_count,
