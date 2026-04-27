@@ -809,15 +809,11 @@ async function searchLoadMore(token, q, scope="title"){
     grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
   }
 
-  // cursor: קודם next_cursor, ואם לא קיים – מהפריט האחרון (cursor)
-  const last = results[results.length - 1];
   const next =
     data.next_cursor ||
     data.videos_next_cursor ||
     data.nextCursor ||
     data.cursor ||
-    last?.cursor ||
-    last?.rowid ||
     null;
 
   searchState.cursor = next ? String(next) : null;
@@ -955,8 +951,7 @@ async function tagLoadMore(token, value, type="tag"){
     grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
   }
 
-  const last = results[results.length - 1];
-  const next = data.next_cursor || last?.cursor || null;
+  const next = data.next_cursor || null;
 
   tagState.cursor = next ? String(next) : null;
   tagState.done = !tagState.cursor || results.length === 0;
