@@ -140,7 +140,10 @@ export async function onRequest({ env, request }) {
     }));
 
     const last = rows[rows.length - 1];
-    out.videos_next_cursor = last ? `${last.published_at ?? 0}:${last.id}` : null;
+    out.videos_next_cursor =
+      rows.length >= videos_limit && last
+        ? `${last.published_at ?? 0}:${last.id}`
+        : null;
   }
 
   return Response.json(out, {
