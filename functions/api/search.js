@@ -181,7 +181,10 @@ export async function onRequest({ env, request }) {
   }));
 
   const last = rows[rows.length - 1];
-  const next_cursor = last ? String(last.id) : null;
+  const next_cursor =
+    rows.length >= limit && last
+      ? String(last.id)
+      : null;
 
   return Response.json(
     { results, next_cursor, scope },

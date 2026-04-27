@@ -20,7 +20,9 @@ export async function onRequest({ env, request }) {
     LIMIT ?
   `).bind(cursorId, cursorId, limit).all();
 
-  const playlists = (rows.results || []).map(r => ({
+  const resultRows = rows.results || [];
+
+  const playlists = resultRows.map(r => ({
     playlist_id: r.playlist_id,
     title: r.title,
     thumb_video_id: r.thumb_video_id,
@@ -30,9 +32,11 @@ export async function onRequest({ env, request }) {
     channel_title: r.channel_title,
   }));
 
-  let next_cursor = null;
-  const last = (rows.results || [])[rows.results.length - 1];
-  if (last) next_cursor = String(last.id);
+  const last = resultRows[resultRows.length - 1];
+  const next_cursor =
+    resultRows.length >= limit && last
+      ? String(last.id)
+      : null;
 
   return Response.json(
     { playlists, next_cursor },
