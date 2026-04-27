@@ -596,9 +596,12 @@ function renderPlaylistCard(p){
     <a class="playlistCard" href="/${encodeURIComponent(p.playlist_id)}" data-link>
       <span class="playlistVisual">
         <span class="playlistThumbWrap thumbWrap">
-          <img class="thumb16x9 playlistThumb" loading="lazy" decoding="async"
-               src="${esc(thumb)}"
-               onerror="this.style.display='none'">
+          ${thumb
+            ? `<img class="thumb16x9 playlistThumb" loading="lazy" decoding="async"
+                 src="${esc(thumb)}"
+                 onerror="this.style.display='none'">`
+            : `<span class="thumb16x9 playlistThumb"></span>`
+          }
           <span class="playlistShade"></span>
           <span class="playlistTypeBadge">פלייליסט</span>
           <span class="playlistCountBadge">${esc(countText)}</span>
