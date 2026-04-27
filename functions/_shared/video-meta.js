@@ -45,7 +45,13 @@ function cleanText(value, maxLen){
 }
 
 function normalizeTagKey(value){
-  return String(value || "").trim().replace(/^#+/, "").trim().toLocaleLowerCase();
+  return String(value || "")
+    .trim()
+    .replace(/^#+/, "")
+    .trim()
+    .replace(/[“”״"]/g, '"')
+    .replace(/[‘’׳']/g, "'")
+    .toLocaleLowerCase();
 }
 
 function cleanTags(tags){
@@ -74,7 +80,7 @@ export function extractHashtags(...texts){
 
   for(const text of texts){
     const s = String(text || "");
-    const re = /(^|[^\p{L}\p{N}_-])#([\p{L}\p{N}_-]{2,80})/gu;
+    const re = /(^|[^\p{L}\p{N}_-])#((?:[\p{L}\p{N}_-]|['"׳״’](?=[\p{L}\p{N}_-])){2,80})/gu;
     let m;
 
     while((m = re.exec(s))){
