@@ -481,7 +481,7 @@ async function resolveRoute({ url, env }) {
         v.title,
         v.published_at,
         v.duration_sec
-      FROM videos v
+      FROM videos v INDEXED BY idx_videos_channel_cover
       WHERE v.channel_int = ?
         AND v.video_id <> ?
       ORDER BY v.published_at DESC, v.id DESC
