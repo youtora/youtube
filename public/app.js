@@ -68,6 +68,63 @@ function fmtLikes(value){
 function arr(value){
   return Array.isArray(value) ? value : [];
 }
+function normalizeTagName(value){
+  return String(value || "").trim().replace(/^#+/, "").trim();
+}
+function tagPageHref(value, type="tag"){
+  const name = normalizeTagName(value);
+  const tagType = type === "hashtag" ? "hashtag" : "tag";
+  const base = tagType === "hashtag" ? "/hashtag" : "/tag";
+  return name ? `${base}/${encodeURIComponent(name)}` : base;
+}
+function splitTrailingUrlPunctuation(value){
+  let main = String(value || "");
+  let tail = "";
+
+  while(main && /[.,!?;:)\]\}״”’']$/.test(main)){
+    tail = main.slice(-1) + tail;
+    main = main.slice(0, -1);
+  }
+
+  return { main, tail };
+}
+function linkifyText(value){
+  const text = String(value || "");
+  if(!text) return "";
+
+  const tokenRe = /(?:https?:\/\/|www\.)[^\s<>"']+|#[\p{L}\p{N}_-]{2,80}/gu;
+  let out = "";
+  let last = 0;
+  let m;
+
+  while((m = tokenRe.exec(text))){
+    const token = m[0];
+    out += esc(text.slice(last, m.index));
+
+    if(token.startsWith("#")){
+      const name = normalizeTagName(token);
+      out += name
+        ? `<a class="inlineHashLink" href="${tagPageHref(name, "hashtag")}" data-link>#${esc(name)}</a>`
+        : esc(token);
+    } else {
+      const { main, tail } = splitTrailingUrlPunctuation(token);
+      const href = main.startsWith("www.") ? `https://${main}` : main;
+      out += main
+        ? `<a class="textLink" href="${esc(href)}" target="_blank" rel="noreferrer noopener">${esc(main)}</a>${esc(tail)}`
+        : esc(token);
+    }
+
+    last = tokenRe.lastIndex;
+  }
+
+  out += esc(text.slice(last));
+  return out;
+}
+function renderTagChip(value){
+  const name = normalizeTagName(value);
+  if(!name) return "";
+  return `<a class="tagChip" href="${tagPageHref(name, "tag")}" data-link>${esc(name)}</a>`;
+}
 function ytVideoThumb(videoId, q="mqdefault"){ return videoId ? `https://i.ytimg.com/vi/${videoId}/${q}.jpg` : ""; }
 function ytShortThumb(videoId){ return videoId ? `https://i.ytimg.com/vi/${videoId}/oar2.jpg` : ""; }
 function videoKindLabel(kind){
@@ -773,6 +830,144 @@ async function searchLoadMore(token, q, scope="title"){
 }
 
 
+/* ---------- TAG / HASHTAG PAGE ---------- */
+let tagState = { key: "", cursor: null, loading: false, done: false, token: 0 };
+
+function normalizeTagType(type){
+  return type === "hashtag" ? "hashtag" : "tag";
+}
+function tagTypeTitle(type){
+  return normalizeTagType(type) === "hashtag" ? "האשטג" : "תגית";
+}
+function tagDisplayValue(value, type){
+  const name = normalizeTagName(value);
+  return normalizeTagType(type) === "hashtag" ? `#${name}` : name;
+}
+
+async function pageTag(value, type="tag"){
+  stopActiveObserver();
+
+  const clean = normalizeTagName(value);
+  const tagType = normalizeTagType(type);
+
+  if(!clean){
+    const emptyTitle = tagTypeTitle(tagType);
+    const emptyBase = tagType === "hashtag" ? "/hashtag" : "/tag";
+    applyRouteMeta({ title:`${emptyTitle} | Youtora`, description:`סרטונים לפי ${emptyTitle} ב־Youtora.`, canonical:emptyBase, robots:'noindex,follow' });
+    setPage(`<div class="h1">${esc(emptyTitle)} לא נמצא</div><p class="sub"><a href="/" data-link>חזרה לבית</a></p>`);
+    return;
+  }
+
+  const display = tagDisplayValue(clean, tagType);
+  const canonical = tagPageHref(clean, tagType);
+
+  applyRouteMeta({
+    title: `${display} | Youtora`,
+    description: `כל הסרטונים עם ${tagTypeTitle(tagType)} ${display} ב־Youtora.`,
+    canonical
+  });
+
+  tagState = { key: `${tagType}|${clean}`, cursor: null, loading: false, done: false, token: tagState.token + 1 };
+  const t = tagState.token;
+
+  setPage(`
+    <div class="h1">סרטונים לפי ${tagTypeTitle(tagType)}</div>
+    <p class="sub"><b>${esc(display)}</b></p>
+
+    <div class="hr"></div>
+
+    <div id="tagGrid" class="grid"></div>
+
+    <div id="tagSentinel" style="height:1px"></div>
+
+    <div class="btnRow" style="margin-top:14px">
+      <button id="tagMoreBtn" class="btn" type="button">טען עוד</button>
+    </div>
+
+    <div id="tagHint" class="muted" style="margin-top:8px"></div>
+  `);
+
+  const btn = document.getElementById("tagMoreBtn");
+  const hint = document.getElementById("tagHint");
+  const sentinel = document.getElementById("tagSentinel");
+
+  btn.onclick = () => tagLoadMore(t, clean, tagType);
+
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO) btn.style.display = "inline-flex";
+
+  await tagLoadMore(t, clean, tagType);
+
+  if (hasIO && !tagState.done) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => tagLoadMore(t, clean, tagType),
+      enabled: true,
+      rootMargin: "200px 0px",
+    });
+  }
+
+  if (hint) hint.textContent = tagState.done ? "סוף הרשימה." : "";
+}
+
+async function tagLoadMore(token, value, type="tag"){
+  const clean = normalizeTagName(value);
+  const tagType = normalizeTagType(type);
+
+  if (tagState.loading || tagState.done) return;
+  if (tagState.key !== `${tagType}|${clean}`) return;
+
+  tagState.loading = true;
+
+  const btn = document.getElementById("tagMoreBtn");
+  const hint = document.getElementById("tagHint");
+  const grid = document.getElementById("tagGrid");
+
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
+
+  const url =
+    `/api/tag?type=${encodeURIComponent(tagType)}&value=${encodeURIComponent(clean)}&limit=50` +
+    (tagState.cursor ? `&cursor=${encodeURIComponent(tagState.cursor)}` : "");
+
+  let data;
+  try {
+    data = await api(url);
+  } catch (err) {
+    tagState.loading = false;
+    if (btn) btn.disabled = false;
+    if (hint) hint.textContent = `שגיאה בטעינה: ${err?.message || String(err)}`;
+    return;
+  }
+
+  if (token !== tagState.token) {
+    tagState.loading = false;
+    return;
+  }
+
+  const results = data.results || data.videos || data.items || [];
+  if (results.length) {
+    grid.insertAdjacentHTML("beforeend", results.map(r => renderVideoCard(r)).join(""));
+  }
+
+  const last = results[results.length - 1];
+  const next = data.next_cursor || last?.cursor || null;
+
+  tagState.cursor = next ? String(next) : null;
+  tagState.done = !tagState.cursor || results.length === 0;
+
+  if (btn) {
+    btn.disabled = false;
+    btn.style.display = !tagState.done ? "inline-flex" : "none";
+  }
+  if (hint) hint.textContent = tagState.done ? "סוף הרשימה." : "";
+
+  if (tagState.done) stopActiveObserver();
+
+  tagState.loading = false;
+}
+
+
 /* ---------- CHANNEL: infinite load videos ---------- */
 let channelVideosState = { key: "", cursor: null, loading: false, done: false, token: 0 };
 
@@ -997,7 +1192,7 @@ async function pageVideo(video_id){
     <div class="watchLayout">
       <section class="watchMain">
         ${player}
-        <div class="h1" style="margin-top:10px">${esc(v.title || v.video_id)}</div>
+        <div class="h1" style="margin-top:10px">${linkifyText(v.title || v.video_id)}</div>
         <p class="sub">${[
           fmtDateRel(v.published_at) ? `פורסם: ${esc(fmtDateRel(v.published_at))}` : "",
           fmtDuration(v.duration_sec) ? `משך: ${esc(fmtDuration(v.duration_sec))}` : "",
@@ -1005,12 +1200,11 @@ async function pageVideo(video_id){
           fmtLikes(v.like_count)
         ].filter(Boolean).join(" · ")}</p>
 
-        ${cleanDescription ? `<div class="videoDescription">${esc(cleanDescription)}</div>` : ``}
+        ${cleanDescription ? `<div class="videoDescription">${linkifyText(cleanDescription)}</div>` : ``}
 
-        ${(arr(v.tags).length || arr(v.hashtags).length) ? `
+        ${arr(v.tags).length ? `
           <div class="tagRow">
-            ${arr(v.hashtags).map(t => `<span class="tagChip">#${esc(t)}</span>`).join("")}
-            ${arr(v.tags).slice(0, 20).map(t => `<span class="tagChip">${esc(t)}</span>`).join("")}
+            ${arr(v.tags).slice(0, 40).map(renderTagChip).join("")}
           </div>
         ` : ``}
 
@@ -1134,6 +1328,8 @@ async function render(){
   if(parts[0] === "channels") return pageChannels();
   if(parts[0] === "playlists") return pagePlaylists();
   if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim(), (qs.get("scope")||"title").trim());
+  if(parts[0] === "hashtag") return pageTag(decodeURIComponent(parts[1] || ""), "hashtag");
+  if(parts[0] === "tag") return pageTag(decodeURIComponent(parts[1] || ""), (qs.get("type")||"tag").trim());
 
   // /UC.../videos /shorts /live /playlists
   if(parts.length >= 1 && isChannelId(parts[0])){

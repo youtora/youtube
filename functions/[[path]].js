@@ -13,6 +13,14 @@ export async function onRequest(context) {
     return Response.redirect(target.toString(), 301);
   }
 
+  const oldHashtagMatch = normalizedPath.match(/^\/tag\/([^/]+)$/);
+  if (oldHashtagMatch && currentUrl.searchParams.get("type") === "hashtag") {
+    const target = new URL(currentUrl.toString());
+    target.pathname = `/hashtag/${oldHashtagMatch[1]}`;
+    target.searchParams.delete("type");
+    return Response.redirect(target.toString(), 301);
+  }
+
   if (normalizedPath === "/robots.txt") return serveRobots(currentUrl);
 
   if (normalizedPath === "/sitemap.xml") {
@@ -290,6 +298,8 @@ function isLikelySpaRoute(path) {
     return true;
   }
 
+  if (/^\/hashtag(?:\/[^/]+)?$/.test(path)) return true;
+  if (/^\/tag(?:\/[^/]+)?$/.test(path)) return true;
   if (/^\/([A-Za-z0-9_-]{11})$/.test(path)) return true;
   if (/^\/(PL[A-Za-z0-9_-]+)$/.test(path)) return true;
   if (/^\/(UC[A-Za-z0-9_-]{10,})(?:\/(videos|shorts|live|playlists))?$/.test(path)) return true;
@@ -344,6 +354,47 @@ function buildFallbackMeta({ url, path }) {
       type: "website",
       title: "Youtora | ערוץ",
       description: "עמוד ערוץ ב־Youtora.",
+      image: `${origin}/default-og.png`,
+      robots: "index,follow,max-image-preview:large",
+    };
+  }
+
+  const hashtagMatch = path.match(/^\/hashtag(?:\/([^/]+))?$/);
+  if (hashtagMatch) {
+    const rawTag = hashtagMatch[1] ? decodeURIComponent(hashtagMatch[1]).trim().replace(/^#+/, "") : "";
+    const display = rawTag ? `#${rawTag}` : "האשטג";
+    return {
+      origin,
+      url: url.toString(),
+      canonical: rawTag ? `${origin}/hashtag/${encodeURIComponent(rawTag)}` : `${origin}/hashtag`,
+      type: "website",
+      title: `${display} | Youtora`,
+      description: rawTag ? `כל הסרטונים עם האשטג ${display} ב־Youtora.` : "סרטונים לפי האשטגים ב־Youtora.",
+      image: `${origin}/default-og.png`,
+      robots: "index,follow,max-image-preview:large",
+    };
+  }
+
+  const tagMatch = path.match(/^\/tag(?:\/([^/]+))?$/);
+  if (tagMatch) {
+    const rawTag = tagMatch[1] ? decodeURIComponent(tagMatch[1]).trim().replace(/^#+/, "") : "";
+    const isOldHashtag = url.searchParams.get("type") === "hashtag";
+    const display = rawTag ? (isOldHashtag ? `#${rawTag}` : rawTag) : (isOldHashtag ? "האשטג" : "תגית");
+    return {
+      origin,
+      url: url.toString(),
+      canonical: rawTag
+        ? isOldHashtag
+          ? `${origin}/hashtag/${encodeURIComponent(rawTag)}`
+          : `${origin}/tag/${encodeURIComponent(rawTag)}`
+        : isOldHashtag
+          ? `${origin}/hashtag`
+          : `${origin}/tag`,
+      type: "website",
+      title: `${display} | Youtora`,
+      description: rawTag
+        ? `כל הסרטונים עם ${isOldHashtag ? "האשטג" : "תגית"} ${display} ב־Youtora.`
+        : `סרטונים לפי ${isOldHashtag ? "האשטגים" : "תגיות"} ב־Youtora.`,
       image: `${origin}/default-og.png`,
       robots: "index,follow,max-image-preview:large",
     };

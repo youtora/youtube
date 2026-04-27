@@ -1495,3 +1495,21 @@ a:hover{text-decoration:none}
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+
+.videoDescription a,
+.h1 .inlineHashLink{
+  color:#065fd4;
+  text-decoration:none;
+  font-weight:800;
+}
+
+.videoDescription a:hover,
+.h1 .inlineHashLink:hover,
+.tagChip:hover{
+  text-decoration:underline;
+}
+
+.tagChip{
+  text-decoration:none;
+  cursor:pointer;
+}
