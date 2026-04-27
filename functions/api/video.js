@@ -26,21 +26,20 @@ export async function onRequest({ env, request }) {
       d.description,
       d.tags_json,
       d.hashtags_json,
-      d.fetched_at AS details_fetched_at
+      d.fetched_at AS details_fetched_at,
+      c.channel_id,
+      c.title AS channel_title,
+      c.thumbnail_url
     FROM videos v
-    LEFT JOIN video_details d ON d.video_id = v.video_id
+    LEFT JOIN video_details d
+      ON d.video_id = v.video_id
+    LEFT JOIN channels c
+      ON c.id = v.channel_int
     WHERE v.video_id = ?
     LIMIT 1
   `).bind(video_id).first();
 
   if (!vrow) return new Response("not found", { status: 404 });
-
-  const crow = await env.DB.prepare(`
-    SELECT channel_id, title AS channel_title, thumbnail_url
-    FROM channels
-    WHERE id = ?
-    LIMIT 1
-  `).bind(vrow.channel_int).first();
 
   const video = {
     video_id: vrow.video_id,
@@ -55,30 +54,26 @@ export async function onRequest({ env, request }) {
     tags: parseJsonArray(vrow.tags_json),
     hashtags: parseJsonArray(vrow.hashtags_json),
     details_fetched_at: vrow.details_fetched_at ?? null,
-    channel_id: crow?.channel_id || null,
-    channel_title: crow?.channel_title || null,
-    thumbnail_url: crow?.thumbnail_url || null,
+    channel_id: vrow.channel_id || null,
+    channel_title: vrow.channel_title || null,
+    thumbnail_url: vrow.thumbnail_url || null
   };
 
   const rec = await env.DB.prepare(`
     SELECT
-      v.video_id,
-      v.title,
-      v.published_at,
-      v.video_kind,
-      v.duration_sec,
-      v.view_count,
-      v.like_count,
-      v.comment_count,
-      c.channel_id,
-      c.title AS channel_title,
-      c.thumbnail_url AS channel_thumbnail_url
-    FROM videos AS v INDEXED BY idx_videos_channel_cover
-    JOIN channels AS c
-      ON c.id = v.channel_int
-    WHERE v.channel_int = ?
-      AND v.video_id <> ?
-    ORDER BY v.published_at DESC, v.id DESC
+      id,
+      video_id,
+      title,
+      published_at,
+      video_kind,
+      duration_sec,
+      view_count,
+      like_count,
+      comment_count
+    FROM videos INDEXED BY idx_videos_channel_cover
+    WHERE channel_int = ?
+      AND video_id <> ?
+    ORDER BY published_at DESC, id DESC
     LIMIT ?
   `).bind(vrow.channel_int, video_id, recLimit).all();
 
@@ -91,9 +86,9 @@ export async function onRequest({ env, request }) {
     view_count: r.view_count ?? null,
     like_count: r.like_count ?? null,
     comment_count: r.comment_count ?? null,
-    channel_id: r.channel_id || null,
-    channel_title: r.channel_title || null,
-    channel_thumbnail_url: r.channel_thumbnail_url || null,
+    channel_id: vrow.channel_id || null,
+    channel_title: vrow.channel_title || null,
+    channel_thumbnail_url: vrow.thumbnail_url || null
   }));
 
   return Response.json(
