@@ -1,7 +1,10 @@
 export async function onRequest({ env, request }) {
   const url = new URL(request.url);
 
-  const limit = 200;
+  const limit = Math.max(
+    1,
+    Math.min(parseInt(url.searchParams.get("limit") || "24", 10) || 24, 50)
+  );
 
   const kindRaw = (url.searchParams.get("kind") || "").trim().toUpperCase();
   const kind = (kindRaw === "S" || kindRaw === "L") ? kindRaw : null;
