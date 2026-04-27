@@ -1200,17 +1200,7 @@ async function pageVideo(video_id){
           fmtLikes(v.like_count)
         ].filter(Boolean).join(" · ")}</p>
 
-        ${cleanDescription ? `<div class="videoDescription">${linkifyText(cleanDescription)}</div>` : ``}
-
-        ${arr(v.tags).length ? `
-          <div class="tagRow">
-            ${arr(v.tags).slice(0, 40).map(renderTagChip).join("")}
-          </div>
-        ` : ``}
-
-        <div class="hr"></div>
-
-        <div class="avatarRow">
+        <div class="avatarRow watchChannelRow">
           ${v.thumbnail_url ? `<img class="avatar" loading="lazy" decoding="async" src="${esc(v.thumbnail_url)}" onerror="this.style.display='none'">`
                             : `<div class="avatar"></div>`}
           <div style="min-width:0">
@@ -1224,6 +1214,16 @@ async function pageVideo(video_id){
             <a class="btn" target="_blank" rel="noreferrer" href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}">פתח ביוטיוב</a>
           </div>
         </div>
+
+        ${arr(v.tags).length ? `
+          <div class="tagRow">
+            ${arr(v.tags).slice(0, 40).map(renderTagChip).join("")}
+          </div>
+        ` : ``}
+
+        ${cleanDescription ? `<div class="videoDescription">${linkifyText(cleanDescription)}</div>` : ``}
+
+        <div class="hr"></div>
       </section>
 
       <aside class="watchSide">
