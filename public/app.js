@@ -1174,7 +1174,7 @@ async function pageVideo(video_id){
       ...(secondsToIsoDuration(v.duration_sec) ? { duration: secondsToIsoDuration(v.duration_sec) } : {}),
       ...(cleanDescription ? { description: cleanDescription } : {}),
       ...((arr(v.tags).length || arr(v.hashtags).length) ? { keywords: [...new Set([...arr(v.tags), ...arr(v.hashtags)])].join(', ') } : {}),
-      ...(Number(v.view_count) > 0 ? {
+      ...(Number(v.view_count) >= MIN_VISIBLE_VIEWS ? {
         interactionStatistic: {
           '@type': 'InteractionCounter',
           interactionType: { '@type': 'WatchAction' },
