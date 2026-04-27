@@ -852,6 +852,151 @@ function tagDisplayValue(value, type){
   const name = normalizeTagName(value);
   return normalizeTagType(type) === "hashtag" ? `#${name}` : name;
 }
+function tagIndexTitle(type){
+  return normalizeTagType(type) === "hashtag" ? "כל ההאשטגים" : "כל התגיות";
+}
+function tagIndexDescription(type){
+  return normalizeTagType(type) === "hashtag"
+    ? "כל ההאשטגים שנמצאו בתיאורי הסרטונים ב־Youtora."
+    : "כל התגיות שנמצאו במטא־דאטה של הסרטונים ב־Youtora.";
+}
+function renderTagIndexItem(item, type){
+  const tagType = normalizeTagType(type);
+  const value = normalizeTagName(item?.value || item?.norm || "");
+  if(!value) return "";
+
+  const display = tagDisplayValue(value, tagType);
+  const count = Number(item?.video_count || 0);
+  const countText = count > 0 ? `${fmtCount(count)} סרטונים` : "סרטונים";
+  const latest = fmtDateRel(item?.latest_published_at);
+
+  return `
+    <a class="tagIndexCard" href="${tagPageHref(value, tagType)}" data-link>
+      <span class="tagIndexName">${esc(display)}</span>
+      <span class="tagIndexMeta">
+        ${esc(countText)}${latest ? ` · סרטון אחרון ${esc(latest)}` : ""}
+      </span>
+    </a>
+  `;
+}
+
+let tagIndexState = { key: "", offset: 0, loading: false, done: false, token: 0 };
+
+async function pageTagIndex(type="tag"){
+  stopActiveObserver();
+
+  const tagType = normalizeTagType(type);
+  const title = tagIndexTitle(tagType);
+  const canonical = tagType === "hashtag" ? "/hashtag" : "/tag";
+
+  applyRouteMeta({
+    title: `${title} | Youtora`,
+    description: tagIndexDescription(tagType),
+    canonical
+  });
+
+  tagIndexState = { key: tagType, offset: 0, loading: false, done: false, token: tagIndexState.token + 1 };
+  const t = tagIndexState.token;
+
+  setPage(`
+    <div class="h1">${esc(title)}</div>
+    <p class="sub">${esc(tagIndexDescription(tagType))}</p>
+
+    <div class="btnRow">
+      <a class="btn ${tagType === "hashtag" ? "primary" : ""}" href="/hashtag" data-link>האשטגים</a>
+      <a class="btn ${tagType === "tag" ? "primary" : ""}" href="/tag" data-link>תגיות</a>
+    </div>
+
+    <div class="hr"></div>
+
+    <div id="tagIndexGrid" class="tagIndexGrid"></div>
+
+    <div id="tagIndexSentinel" style="height:1px"></div>
+
+    <div class="btnRow" style="margin-top:14px">
+      <button id="tagIndexMoreBtn" class="btn" type="button">טען עוד</button>
+    </div>
+
+    <div id="tagIndexHint" class="muted" style="margin-top:8px"></div>
+  `);
+
+  const btn = document.getElementById("tagIndexMoreBtn");
+  const sentinel = document.getElementById("tagIndexSentinel");
+
+  if (btn) btn.onclick = () => tagIndexLoadMore(t, tagType);
+
+  const hasIO = typeof IntersectionObserver !== "undefined";
+  if (!hasIO && btn) btn.style.display = "inline-flex";
+
+  await tagIndexLoadMore(t, tagType);
+
+  if (hasIO && !tagIndexState.done) {
+    startInfiniteScroll({
+      sentinelEl: sentinel,
+      onNearEnd: () => tagIndexLoadMore(t, tagType),
+      enabled: true,
+      rootMargin: "200px 0px",
+    });
+  }
+}
+
+async function tagIndexLoadMore(token, type="tag"){
+  const tagType = normalizeTagType(type);
+
+  if (tagIndexState.loading || tagIndexState.done) return;
+  if (tagIndexState.key !== tagType) return;
+
+  tagIndexState.loading = true;
+
+  const btn = document.getElementById("tagIndexMoreBtn");
+  const hint = document.getElementById("tagIndexHint");
+  const grid = document.getElementById("tagIndexGrid");
+
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = "טוען…";
+
+  let data;
+  try {
+    data = await api(`/api/tags?type=${encodeURIComponent(tagType)}&limit=200&offset=${encodeURIComponent(tagIndexState.offset)}`);
+  } catch (err) {
+    tagIndexState.loading = false;
+    if (btn) btn.disabled = false;
+    if (hint) hint.textContent = `שגיאה בטעינה: ${err?.message || String(err)}`;
+    return;
+  }
+
+  if (token !== tagIndexState.token) {
+    tagIndexState.loading = false;
+    return;
+  }
+
+  const results = data.results || data.items || [];
+  const html = results.map(item => renderTagIndexItem(item, tagType)).filter(Boolean).join("");
+  if (html && grid) grid.insertAdjacentHTML("beforeend", html);
+
+  const next = data.next_offset ?? null;
+  tagIndexState.offset = next !== null ? Number(next) : tagIndexState.offset + results.length;
+  tagIndexState.done = next === null || results.length === 0;
+
+  if (btn) {
+    btn.disabled = false;
+    btn.style.display = !tagIndexState.done ? "inline-flex" : "none";
+  }
+
+  if (hint) {
+    if (!results.length && !grid?.children?.length) {
+      hint.textContent = tagType === "hashtag"
+        ? "עדיין לא נמצאו האשטגים. צריך להריץ רענון מטא־דאטה לסרטונים."
+        : "עדיין לא נמצאו תגיות. צריך להריץ רענון מטא־דאטה לסרטונים.";
+    } else {
+      hint.textContent = tagIndexState.done ? "סוף הרשימה." : "";
+    }
+  }
+
+  if (tagIndexState.done) stopActiveObserver();
+
+  tagIndexState.loading = false;
+}
 
 async function pageTag(value, type="tag"){
   stopActiveObserver();
@@ -1339,8 +1484,14 @@ async function render(){
   if(parts[0] === "channels") return pageChannels();
   if(parts[0] === "playlists") return pagePlaylists();
   if(parts[0] === "search") return pageSearch((qs.get("q")||"").trim(), (qs.get("scope")||"title").trim());
-  if(parts[0] === "hashtag") return pageTag(decodeURIComponent(parts[1] || ""), "hashtag");
-  if(parts[0] === "tag") return pageTag(decodeURIComponent(parts[1] || ""), (qs.get("type")||"tag").trim());
+  if(parts[0] === "hashtag") {
+    if(parts.length === 1) return pageTagIndex("hashtag");
+    return pageTag(decodeURIComponent(parts[1] || ""), "hashtag");
+  }
+  if(parts[0] === "tag") {
+    if(parts.length === 1) return pageTagIndex((qs.get("type")||"tag").trim());
+    return pageTag(decodeURIComponent(parts[1] || ""), (qs.get("type")||"tag").trim());
+  }
 
   // /UC.../videos /shorts /live /playlists
   if(parts.length >= 1 && isChannelId(parts[0])){
