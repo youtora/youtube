@@ -2,15 +2,29 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+function intParam(url, name, fallback, min, max) {
+  const n = parseInt(url.searchParams.get(name) || String(fallback), 10);
+  return clamp(Number.isFinite(n) ? n : fallback, min, max);
+}
+
 function normalizeTagName(value) {
   return String(value || "").trim().replace(/^#+/, "").trim();
+}
+
+function normalizeTagKey(value) {
+  return normalizeTagName(value).toLocaleLowerCase();
 }
 
 function normalizeTagType(value) {
   return value === "hashtag" ? "hashtag" : "tag";
 }
 
-function buildTagSql(column, hasCursor) {
+function parseCursor(raw) {
+  const n = parseInt(String(raw || "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function buildTagSql(hasCursor) {
   return `
     SELECT
       v.id,
@@ -25,18 +39,15 @@ function buildTagSql(column, hasCursor) {
       c.channel_id,
       c.title AS channel_title,
       c.thumbnail_url AS channel_thumbnail_url
-    FROM video_details AS d
+    FROM video_tags AS t INDEXED BY idx_video_tags_lookup
     JOIN videos AS v
-      ON v.video_id = d.video_id
+      ON v.id = t.video_rowid
     JOIN channels AS c
       ON c.id = v.channel_int
-    WHERE EXISTS (
-      SELECT 1
-      FROM json_each(CASE WHEN json_valid(d.${column}) THEN d.${column} ELSE '[]' END) AS je
-      WHERE LOWER(TRIM(CAST(je.value AS TEXT), '# ')) = LOWER(?)
-    )
-    ${hasCursor ? "AND v.id < ?" : ""}
-    ORDER BY v.id DESC
+    WHERE t.tag_type = ?
+      AND t.tag_norm = ?
+      ${hasCursor ? "AND t.video_rowid < ?" : ""}
+    ORDER BY t.video_rowid DESC, t.id DESC
     LIMIT ?
   `;
 }
@@ -45,26 +56,23 @@ export async function onRequest({ env, request }) {
   const url = new URL(request.url);
 
   const value = normalizeTagName(url.searchParams.get("value") || url.searchParams.get("tag") || "");
+  const valueNorm = normalizeTagKey(value);
   const type = normalizeTagType((url.searchParams.get("type") || "tag").trim().toLowerCase());
-  const limit = clamp(parseInt(url.searchParams.get("limit") || "50", 10), 1, 100);
+  const limit = intParam(url, "limit", 50, 1, 100);
+  const cursor = parseCursor(url.searchParams.get("cursor") || "");
 
-  const cursorRaw = (url.searchParams.get("cursor") || "").trim();
-  const cursor = cursorRaw ? parseInt(cursorRaw, 10) : null;
-
-  if (!value) {
+  if (!valueNorm) {
     return Response.json(
       { results: [], next_cursor: null, value, type },
       { headers: { "cache-control": "public, max-age=30" } }
     );
   }
 
-  const column = type === "hashtag" ? "hashtags_json" : "tags_json";
-  const hasCursor = Number.isFinite(cursor) && cursor > 0;
-  const sql = buildTagSql(column, hasCursor);
+  const sql = buildTagSql(cursor !== null);
 
-  const res = hasCursor
-    ? await env.DB.prepare(sql).bind(value, cursor, limit).all()
-    : await env.DB.prepare(sql).bind(value, limit).all();
+  const res = cursor !== null
+    ? await env.DB.prepare(sql).bind(type, valueNorm, cursor, limit).all()
+    : await env.DB.prepare(sql).bind(type, valueNorm, limit).all();
 
   const rows = res.results || [];
   const results = rows.map(v => ({
