@@ -74,7 +74,12 @@ function arr(value){
   return Array.isArray(value) ? value : [];
 }
 function normalizeTagName(value){
-  return String(value || "").trim().replace(/^#+/, "").trim();
+  return String(value || "")
+    .trim()
+    .replace(/^#+/, "")
+    .trim()
+    .replace(/[“”״]/g, '"')
+    .replace(/[‘’׳]/g, "'");
 }
 function tagPageHref(value, type="tag"){
   const name = normalizeTagName(value);
@@ -97,7 +102,7 @@ function linkifyText(value){
   const text = String(value || "");
   if(!text) return "";
 
-  const tokenRe = /(?:https?:\/\/|www\.)[^\s<>"']+|#[\p{L}\p{N}_-]{2,80}/gu;
+  const tokenRe = /(?:https?:\/\/|www\.)[^\s<>"']+|#(?:[\p{L}\p{N}_-]|['"׳״‘’“”](?=[\p{L}\p{N}_-])){2,80}/gu;
   let out = "";
   let last = 0;
   let m;
