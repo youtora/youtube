@@ -102,11 +102,17 @@ function rewriteIndex(response, meta) {
   const robots = meta.robots || "index,follow,max-image-preview:large";
   const ogType = meta.type || "website";
   const jsonLd = meta.jsonLd ? `<script id="structured-data" type="application/ld+json">${escJson(meta.jsonLd)}</script>` : `<script id="structured-data" type="application/ld+json"></script>`;
+  let titleWritten = false;
 
   return new HTMLRewriter()
     .on("title", {
       text(text) {
-        text.replace(title);
+        if (!titleWritten) {
+          text.replace(title);
+          titleWritten = true;
+        } else {
+          text.remove();
+        }
       },
     })
     .on('meta[name="description"]', setAttr("content", description))
@@ -125,6 +131,13 @@ function rewriteIndex(response, meta) {
     .on('script#structured-data', {
       element(el) {
         el.replace(jsonLd, { html: true });
+      },
+    })
+    .on("div#page", {
+      element(el) {
+        if (meta.pageHtml) {
+          el.setInnerContent(meta.pageHtml, { html: true });
+        }
       },
     })
     .transform(response);
@@ -461,6 +474,19 @@ async function resolveRoute({ url, env }) {
     const videoId = String(row.video_id || "").trim();
     if (!videoId) return { found: false };
 
+    const related = await safeAll(env.DB, `
+      SELECT
+        v.video_id,
+        v.title,
+        v.published_at,
+        v.duration_sec
+      FROM videos v
+      WHERE v.channel_int = ?
+        AND v.video_id <> ?
+      ORDER BY v.published_at DESC, v.id DESC
+      LIMIT 12
+    `, [row.channel_int, videoId]);
+
     const title = String(row.title || videoId).trim() || videoId;
     const channelTitle = String(row.channel_title || row.channel_id || "").trim();
     const rawVideoDescription = String(row.video_description || "").trim();
@@ -477,11 +503,12 @@ async function resolveRoute({ url, env }) {
         url: url.toString(),
         canonical,
         type: "video.other",
-        title: `${title} | Youtora`,
+        title: `${stripSiteSuffix(title)} | Youtora`,
         description,
         image: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
         robots: "index,follow,max-image-preview:large",
         jsonLd: buildVideoJsonLd({ row, canonical }),
+        pageHtml: buildVideoSeoHtml({ row, canonical, related }),
       },
     };
   }
@@ -633,13 +660,115 @@ function getStaticMeta({ path, url }) {
 }
 
 function makeSeoDescription(description, title, channelTitle) {
-  const clean = String(description || "")
+  const clean = cleanSeoText(description, 220)
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
   const base = clean || [title, channelTitle].filter(Boolean).join(" · ");
   return base.length > 165 ? `${base.slice(0, 162).trim()}…` : base;
+}
+
+function buildVideoSeoHtml({ row, canonical, related = [] }) {
+  const videoId = String(row?.video_id || "").trim();
+  const title = stripSiteSuffix(String(row?.title || videoId).trim() || videoId);
+  const channelId = String(row?.channel_id || "").trim();
+  const channelTitle = String(row?.channel_title || channelId || "").trim();
+  const description = cleanSeoText(row?.video_description || "", 1800);
+  const tags = [
+    ...parseJsonArray(row?.hashtags_json).map((tag) => `#${String(tag).replace(/^#+/, "")}`),
+    ...parseJsonArray(row?.tags_json).map((tag) => String(tag).replace(/^#+/, "")),
+  ].filter(Boolean).slice(0, 18);
+  const relatedItems = (related || []).filter((item) => item?.video_id).slice(0, 8);
+
+  return `
+    <article class="seoVideoPage" aria-label="פרטי הסרטון">
+      <h1>${html(title)}</h1>
+
+      <div class="seoVideoEmbed">
+        <iframe
+          src="https://www.youtube.com/embed/${encodeURIComponent(videoId)}?rel=0"
+          title="${html(title)}"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen></iframe>
+      </div>
+
+      <p class="seoVideoMeta">
+        ${channelId ? `<a href="/${encodeURIComponent(channelId)}/videos" data-link>${html(channelTitle || channelId)}</a>` : html(channelTitle)}
+        ${row?.published_at ? `<span>פורסם: ${html(formatHebrewDate(row.published_at))}</span>` : ""}
+        ${row?.duration_sec ? `<span>משך: ${html(formatDurationText(row.duration_sec))}</span>` : ""}
+      </p>
+
+      ${tags.length ? `<nav class="seoTags" aria-label="תגיות">${tags.map(renderSeoTag).join("")}</nav>` : ""}
+
+      ${description ? `<p class="seoDescription">${html(description)}</p>` : ""}
+
+      <p class="seoOriginalLink">
+        <a href="https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}" target="_blank" rel="nofollow noopener noreferrer">פתח את הסרטון המקורי ביוטיוב</a>
+      </p>
+
+      ${relatedItems.length ? `
+        <section class="seoRelated" aria-label="עוד סרטונים מהערוץ">
+          <h2>עוד סרטונים מהערוץ</h2>
+          <ul>
+            ${relatedItems.map((item) => `
+              <li>
+                <a href="/${encodeURIComponent(item.video_id)}" data-link>${html(stripSiteSuffix(item.title || item.video_id))}</a>
+                ${item.published_at ? `<span>${html(formatHebrewDate(item.published_at))}</span>` : ""}
+              </li>
+            `).join("")}
+          </ul>
+        </section>
+      ` : ""}
+    </article>
+  `;
+}
+
+function renderSeoTag(rawTag) {
+  const value = String(rawTag || "").trim();
+  if (!value) return "";
+
+  if (value.startsWith("#")) {
+    const clean = value.replace(/^#+/, "").trim();
+    return clean ? `<a href="/hashtag/${encodeURIComponent(clean)}" data-link>${html(`#${clean}`)}</a>` : "";
+  }
+
+  return `<a href="/tag/${encodeURIComponent(value)}" data-link>${html(value)}</a>`;
+}
+
+function cleanSeoText(value, maxLen = 1000) {
+  const clean = String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!clean) return "";
+  return clean.length > maxLen ? `${clean.slice(0, Math.max(0, maxLen - 1)).trim()}…` : clean;
+}
+
+function stripSiteSuffix(value) {
+  return String(value || "").replace(/\s*\|\s*Youtora\s*$/i, "").trim();
+}
+
+function formatHebrewDate(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return new Intl.DateTimeFormat("he-IL", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(n * 1000));
+}
+
+function formatDurationText(value) {
+  const n = Math.floor(Number(value || 0));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = n % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function buildVideoJsonLd({ row, canonical }) {
@@ -655,13 +784,13 @@ function buildVideoJsonLd({ row, canonical }) {
     thumbnailUrl: [`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`],
   };
 
-  const description = String(row?.video_description || "").trim();
+  const description = cleanSeoText(row?.video_description || "", 900);
   if (description) json.description = description;
 
   const tags = [
     ...parseJsonArray(row?.tags_json),
     ...parseJsonArray(row?.hashtags_json)
-  ].filter(Boolean);
+  ].filter(Boolean).slice(0, 15);
   if (tags.length) json.keywords = [...new Set(tags)].join(", ");
 
   const viewCount = Number(row?.view_count || 0);
@@ -768,4 +897,13 @@ function xml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function html(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
