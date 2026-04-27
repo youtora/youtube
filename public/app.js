@@ -57,8 +57,13 @@ function fmtCount(value){
   try { return new Intl.NumberFormat('he-IL', { notation:'compact', maximumFractionDigits:1 }).format(n); }
   catch { return String(Math.round(n)); }
 }
+const MIN_VISIBLE_VIEWS = 10; // מציגים צפיות רק מ־10 ומעלה
+
 function fmtViews(value){
-  const s = fmtCount(value);
+  const n = Number(value);
+  if(!Number.isFinite(n) || n < MIN_VISIBLE_VIEWS) return "";
+
+  const s = fmtCount(n);
   return s ? `${s} צפיות` : "";
 }
 function fmtLikes(value){
