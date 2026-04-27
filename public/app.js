@@ -980,9 +980,12 @@ async function pageChannel(channel_id, tab){
   setPage(`<div class="muted">טוען ערוץ…</div>`);
 
   const include_playlists = activeTab === "playlists" ? "1" : "0";
+  const include_videos = activeTab === "playlists" ? "0" : "1";
+
   const data = await api(
     `/api/channel?channel_id=${encodeURIComponent(channel_id)}` +
     `&include_playlists=${include_playlists}` +
+    `&include_videos=${include_videos}` +
     `&videos_limit=24` +
     (kind ? `&kind=${encodeURIComponent(kind)}` : "")
   );
