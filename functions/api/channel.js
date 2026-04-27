@@ -27,7 +27,10 @@ export async function onRequest({ env, request }) {
   const kindRaw = (url.searchParams.get("kind") || "").trim().toUpperCase();
   const kind = (kindRaw === "S" || kindRaw === "L") ? kindRaw : null;
 
-  const videos_limit = 200;
+  const videos_limit = Math.max(
+    1,
+    Math.min(parseInt(url.searchParams.get("videos_limit") || "24", 10) || 24, 50)
+  );
 
   const videos_cursor_raw =
     url.searchParams.get("videos_cursor") ||
